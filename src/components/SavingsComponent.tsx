@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useAccount, useBalance, useWriteContract, useTransaction } from "wagmi";
-import { parseEther, formatEther } from "viem";
+import { _parseEther, _formatEther } from "viem";
 import { Address } from "viem";
 import { motion } from "framer-motion";
-import { CONTRACT_ADDRESSES } from "@/lib/contracts";
+import { _CONTRACT_ADDRESSES } from "@/lib/contracts";
 
 // Savings plan card component
 const SavingsPlanCard = ({
@@ -205,10 +205,10 @@ export default function SavingsComponent() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [savingsPlans, setSavingsPlans] = useState<any[]>([]);
   const [totalSaved, setTotalSaved] = useState("0.00");
-  const [savingsGoal, setSavingsGoal] = useState("5.00");
+  const [_savingsGoal, setSavingsGoal] = useState("5.00");
   const [isLoading, setIsLoading] = useState(false);
   
-  const { address, isConnected } = useAccount();
+  const { address, _isConnected } = useAccount();
   
   // Get ETH balance for the user
   const { data: ethBalance } = useBalance({
@@ -218,7 +218,7 @@ export default function SavingsComponent() {
   // Create savings plan example contract write (this would connect to your actual contract)
   const { writeContract, data: createData } = useWriteContract();
   
-  const createSavingsPlan = (args: any) => {
+  const _createSavingsPlan = (args: any) => {
     writeContract({
       address: "0x..." as Address, // Replace with your contract address
       abi: [], // Replace with your contract ABI
@@ -274,8 +274,8 @@ export default function SavingsComponent() {
     setIsLoading(true);
     
     // In a real app, this would call your contract
-    // createSavingsPlan({
-    //   args: [data.title, parseEther(data.amount), data.frequency],
+    // _createSavingsPlan({
+    //   args: [data.title, _parseEther(data.amount), data.frequency],
     // });
     
     // Simulating contract interaction
@@ -308,7 +308,7 @@ export default function SavingsComponent() {
 
   if (!mounted) return null;
 
-  const progressPercentage = Math.min(100, (parseFloat(totalSaved) / parseFloat(savingsGoal)) * 100);
+  const progressPercentage = Math.min(100, (parseFloat(totalSaved) / parseFloat(_savingsGoal)) * 100);
 
   return (
     <div className="space-y-6">
@@ -340,7 +340,7 @@ export default function SavingsComponent() {
             </div>
             <div>
               <p className="text-gray-400 text-sm">Savings Goal</p>
-              <h3 className="text-white text-2xl font-bold mt-1">{savingsGoal} ETH</h3>
+              <h3 className="text-white text-2xl font-bold mt-1">{_savingsGoal} ETH</h3>
             </div>
           </div>
           

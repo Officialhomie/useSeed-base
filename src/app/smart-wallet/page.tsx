@@ -8,7 +8,7 @@ import '../page-styles.css';
 import '../smart-wallet.css';
 
 export default function SmartWalletPage() {
-  const [mounted, setMounted] = useState(false);
+  const [_mounted, setMounted] = useState(false);
 
   // Handle hydration
   useEffect(() => {
@@ -226,23 +226,23 @@ export default function SmartWalletPage() {
                   <h3 className="text-xl font-semibold mb-3">How secure are Spend Permissions?</h3>
                   <p className="text-gray-400">
                     Spend Permissions are built on secure smart contracts with strict limits on how much can be spent in a given time period. 
-                    You can revoke permissions at any time, and the spender can only withdraw the amount you've authorized.
+                    You can revoke permissions at any time, and the spender can only withdraw the amount you&apos;ve authorized.
                   </p>
                 </div>
                 
                 <div className="bg-black/50 rounded-xl p-6 border border-gray-800">
-                  <h3 className="text-xl font-semibold mb-3">Can I modify a permission after it's created?</h3>
+                  <h3 className="text-xl font-semibold mb-3">Can I modify a permission after it&apos;s created?</h3>
                   <p className="text-gray-400">
-                    Once created, a Spend Permission's parameters cannot be modified. To change any parameter, you'll need to revoke 
+                    Once created, a Spend Permission&apos;s parameters cannot be modified. To change any parameter, you&apos;ll need to revoke 
                     the existing permission and create a new one with the updated parameters.
                   </p>
                 </div>
                 
                 <div className="bg-black/50 rounded-xl p-6 border border-gray-800">
-                  <h3 className="text-xl font-semibold mb-3">What happens if I don't have enough funds?</h3>
+                  <h3 className="text-xl font-semibold mb-3">What happens if I don&apos;t have enough funds?</h3>
                   <p className="text-gray-400">
-                    If your wallet doesn't have enough funds when a collection is attempted, the transaction will fail. The spender may 
-                    try again later, but they cannot take more than what's available in your wallet.
+                    If your wallet doesn&apos;t have enough funds when a collection is attempted, the transaction will fail. The spender may 
+                    try again later, but they cannot take more than what&apos;s available in your wallet.
                   </p>
                 </div>
               </div>

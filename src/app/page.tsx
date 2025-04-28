@@ -185,7 +185,7 @@ export default function Home() {
   );
 }
 
-function FeatureCard({ icon, title, description }: { icon: string; title: string; description: string }) {
+function _FeatureCard({ icon, title, description }: { icon: string; title: string; description: string }) {
   return (
     <div className="bg-black/60 border border-gray-800 rounded-lg p-5 hover:border-blue-800 transition-colors feature-card">
       <div className="text-2xl mb-2 feature-icon">{icon}</div>

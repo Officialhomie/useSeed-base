@@ -6,6 +6,7 @@ import { cn, color, pressable, text } from "@coinbase/onchainkit/theme";
 import { useAccount, useConnect, useConnectors, useSignTypedData, useBalance } from "wagmi";
 import { Address, Hex, parseUnits } from "viem";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
+import AdvancedOnboarding from "./AdvancedOnboarding";
 
 // Step indicators component
 const StepIndicators = ({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) => {
@@ -36,7 +37,8 @@ export default function OnboardingFlow() {
     savingsAmount: "50",
     targetToken: CONTRACT_ADDRESSES.ETH,
     riskTolerance: "medium",
-    selectedSubscription: "pro"
+    selectedSubscription: "pro",
+    selectedStrategy: ""
   });
   
   const [mounted, setMounted] = useState(false);
@@ -44,8 +46,9 @@ export default function OnboardingFlow() {
   const { connectAsync } = useConnect();
   const connectors = useConnectors();
   const { signTypedDataAsync } = useSignTypedData();
-  const { data: balanceData } = useBalance({
+  const { data: _balanceData } = useBalance({
     address,
+    watch: true,
   });
   
   // Handle hydration
@@ -189,7 +192,7 @@ export default function OnboardingFlow() {
               <div className="text-center">
                 <h2 className="text-3xl font-bold mb-4">Connect Your Wallet</h2>
                 <p className="text-gray-400 mb-8 max-w-md mx-auto">
-                  Let's get started by connecting your wallet. This will allow you to interact with our protocol.
+                  Let&apos;s get started by connecting your wallet. This will allow you to interact with our protocol.
                 </p>
                 <div className="max-w-xs mx-auto">
                   <button
@@ -233,7 +236,7 @@ export default function OnboardingFlow() {
               <div>
                 <h2 className="text-3xl font-bold mb-4 text-center">Set Your Savings Goal</h2>
                 <p className="text-gray-400 mb-8 text-center">
-                  Let's establish your savings goals so we can help you reach them.
+                  Let&apos;s establish your savings goals so we can help you reach them.
                 </p>
                 
                 <div className="space-y-6 max-w-lg mx-auto">
@@ -285,63 +288,18 @@ export default function OnboardingFlow() {
             )}
             
             {currentStep === 2 && (
-              <div>
-                <h2 className="text-3xl font-bold mb-4 text-center">Investment Preferences</h2>
-                <p className="text-gray-400 mb-8 text-center">
-                  Choose your investment preferences to optimize your savings strategy.
-                </p>
-                
-                <div className="space-y-6 max-w-lg mx-auto">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Target Token for Investment
-                    </label>
-                    <select
-                      name="targetToken"
-                      value={formData.targetToken}
-                      onChange={handleInputChange}
-                      className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    >
-                      <option value={CONTRACT_ADDRESSES.ETH}>ETH</option>
-                      <option value={CONTRACT_ADDRESSES.USDC}>USDC</option>
-                      <option value={CONTRACT_ADDRESSES.WETH}>WETH</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Risk Tolerance
-                    </label>
-                    <div className="grid grid-cols-3 gap-4">
-                      {["low", "medium", "high"].map(risk => (
-                        <div
-                          key={risk}
-                          className={`border ${
-                            formData.riskTolerance === risk
-                              ? "border-blue-500 bg-blue-500/10"
-                              : "border-gray-700 hover:border-gray-500"
-                          } rounded-lg p-4 cursor-pointer transition-all text-center`}
-                          onClick={() => setFormData(prev => ({ ...prev, riskTolerance: risk }))}
-                        >
-                          <div className={`w-6 h-6 mx-auto mb-2 rounded-full ${
-                            risk === "low" ? "bg-green-500" : risk === "medium" ? "bg-yellow-500" : "bg-red-500"
-                          } flex items-center justify-center text-white text-xs`}>
-                            {risk === "low" ? "L" : risk === "medium" ? "M" : "H"}
-                          </div>
-                          <p className="capitalize">{risk}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {formData.riskTolerance === "low" 
-                        ? "Conservative strategy focused on capital preservation with lower returns" 
-                        : formData.riskTolerance === "medium"
-                          ? "Balanced approach with moderate risk and potential returns"
-                          : "Aggressive strategy focused on maximum growth with higher volatility"}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <AdvancedOnboarding
+                formData={formData}
+                onStrategySelect={(strategy) => {
+                  // Store selected strategy in form data
+                  setFormData(prev => ({
+                    ...prev,
+                    selectedStrategy: strategy.id,
+                    riskTolerance: strategy.riskLevel
+                  }));
+                }}
+                currentStep={currentStep}
+              />
             )}
             
             {currentStep === 3 && (

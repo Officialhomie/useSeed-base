@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Avatar, Name } from '@coinbase/onchainkit/identity';
 import { useAvatar, useName } from '@coinbase/onchainkit/identity';
 import { getAvatar, getName } from '@coinbase/onchainkit/identity';
-import { base, baseSepolia } from 'wagmi/chains';
+import { _base, baseSepolia } from 'wagmi/chains';
 
 // Example addresses with Basenames
 const FEATURED_ADDRESSES = [
@@ -17,13 +17,13 @@ type EthAddress = `0x${string}`;
 
 // Profile Card component using direct components with fallback error handling
 const ProfileCard = ({ address }: { address: string }) => {
-  const [hasError, setHasError] = useState(false);
+  const [_hasError, setHasError] = useState(false);
   const safeAddress = address as EthAddress;
   
   return (
     <div className="onchainkit-card profile-card">
       <div className="profile-header">
-        {hasError ? (
+        {_hasError ? (
           <div className="avatar-fallback">
             <img 
               src={`https://effigy.im/a/${address}.svg`} 
@@ -41,7 +41,7 @@ const ProfileCard = ({ address }: { address: string }) => {
         )}
         <div className="profile-details">
           <h3>
-            {hasError ? 
+            {_hasError ? 
               `${address.slice(0, 6)}...${address.slice(-4)}` : 
               <Name 
                 address={safeAddress}
@@ -75,7 +75,7 @@ const EnhancedProfileCard = ({ address }: { address: string }) => {
     chain: baseSepolia,
   });
   
-  const hasError = nameError || avatarError;
+  const _hasError = nameError || avatarError;
   
   return (
     <div className="onchainkit-card enhanced-profile-card">
