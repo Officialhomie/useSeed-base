@@ -6,51 +6,55 @@ import { coinbaseWallet } from "wagmi/connectors";
 export const cbWalletConnector = coinbaseWallet({
   appName: "SpendSave Protocol",
   appLogoUrl: "/logo.png", // Optional logo URL
-  preference: "smartWalletOnly",
-  defaultChainId: baseSepolia.id,
+  preference: "all", // Allow all wallet types (EOA and Smart Wallets)
+  chainId: baseSepolia.id, // Default chain ID
 });
 
-// Custom logger for development debugging
-const logger = {
-  error: (message: string, error?: any) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error(`[WAGMI ERROR] ${message}`, error);
-    }
-  },
-  warn: (message: string) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn(`[WAGMI WARNING] ${message}`);
-    }
-  },
-  info: (message: string) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.info(`[WAGMI INFO] ${message}`);
-    }
+// Configure debugger for development
+function setupDebugger() {
+  if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+    // Add listener for wallet connection events
+    window.addEventListener('wallet-connection-error', (event) => {
+      console.error('[Wallet Connection Error]', (event as CustomEvent).detail);
+    });
   }
-};
+}
 
+// Call setup function
+setupDebugger();
+
+// Properly configure transports for each chain
 export const config = createConfig({
   chains: [baseSepolia, base],
-  multiInjectedProviderDiscovery: false,
+  multiInjectedProviderDiscovery: true, // Discover all providers
   connectors: [cbWalletConnector],
   ssr: true,
   transports: {
-    [baseSepolia.id]: http({
+    [baseSepolia.id]: http(`https://sepolia.base.org`, {
       retryCount: 3,
-      timeout: 15_000, // 15 seconds
+      retryDelay: 1000,
+      timeout: 30000,
       fetchOptions: {
         cache: 'no-store',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
     }),
-    [base.id]: http({
+    [base.id]: http(`https://mainnet.base.org`, {
       retryCount: 3,
-      timeout: 15_000, // 15 seconds
+      retryDelay: 1000,
+      timeout: 30000,
       fetchOptions: {
         cache: 'no-store',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       },
     }),
   },
-  // Enhanced error handling
   syncConnectedChain: true,
 });
 

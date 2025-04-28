@@ -1,0 +1,111 @@
+import { createPublicClient, Address, Hex, http, Chain, getContract } from "viem";
+import { baseSepolia } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
+import { spendPermissionManagerAbi, spendPermissionManagerAddress } from "./abi/SpendPermissionManager";
+
+// Contract addresses
+export const CONTRACT_ADDRESSES = {
+  SPEND_PERMISSION_MANAGER: spendPermissionManagerAddress as Address,
+  YIELD_MODULE: "0x7490C06A3aa9f67cF0A3C60c16d8C1c9cDb4d80A" as Address,
+  DCA: "0xaa6e63E70C8c267145953c505E166193DC775e9e" as Address,
+  SAVING: "0x80B797A3a3d75f2bbeEA0ba4672c1de2D95B9c07" as Address,
+  DAILY_SAVINGS: "0x134f9eF6441eF08d10545106ca9c5058e4AED695" as Address,
+  SPEND_SAVE_STORAGE: "0x130Acdd4d63dDaBc3c834e059Fcb6467E9bAb88b" as Address,
+  SPEND_SAVE_HOOK: "0x11b946B9852c52d2DBAEc4de0Bd4cAA1438880cC" as Address,
+  // Common token addresses
+  ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address,
+  USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address,
+  WETH: "0x4200000000000000000000000000000000000006" as Address,
+} as const;
+
+// Import ABIs
+import yieldModuleAbi from "../ABI/YieldModule.json";
+import dcaAbi from "../ABI/DCA.json";
+import savingAbi from "../ABI/Saving.json";
+import dailySavingsAbi from "../ABI/DailySavings.json";
+import spendSaveStorageAbi from "../ABI/SpenSaveStorage.json";
+import spendSaveHookAbi from "../ABI/SpendSaveHook.json";
+import tokenAbi from "../ABI/Token.json";
+
+// Initialize public client
+export const getPublicClient = (chain: Chain = baseSepolia) => {
+  return createPublicClient({
+    chain,
+    transport: http(),
+  });
+};
+
+// Contract instances creation helper
+export const getContractInstance = (
+  address: Address,
+  abi: any,
+  chain: Chain = baseSepolia
+) => {
+  const publicClient = getPublicClient(chain);
+  return getContract({
+    address,
+    abi,
+    client: publicClient,
+  });
+};
+
+// Get contract instances
+export const getContracts = (chain: Chain = baseSepolia) => {
+  return {
+    spendPermissionManager: getContractInstance(
+      CONTRACT_ADDRESSES.SPEND_PERMISSION_MANAGER,
+      spendPermissionManagerAbi,
+      chain
+    ),
+    yieldModule: getContractInstance(
+      CONTRACT_ADDRESSES.YIELD_MODULE,
+      yieldModuleAbi,
+      chain
+    ),
+    dca: getContractInstance(
+      CONTRACT_ADDRESSES.DCA,
+      dcaAbi,
+      chain
+    ),
+    saving: getContractInstance(
+      CONTRACT_ADDRESSES.SAVING,
+      savingAbi,
+      chain
+    ),
+    dailySavings: getContractInstance(
+      CONTRACT_ADDRESSES.DAILY_SAVINGS,
+      dailySavingsAbi,
+      chain
+    ),
+    spendSaveStorage: getContractInstance(
+      CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
+      spendSaveStorageAbi,
+      chain
+    ),
+    spendSaveHook: getContractInstance(
+      CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+      spendSaveHookAbi,
+      chain
+    ),
+  };
+};
+
+// Helper for token contract instances
+export const getTokenContract = (
+  tokenAddress: Address,
+  chain: Chain = baseSepolia
+) => {
+  return getContractInstance(tokenAddress, tokenAbi, chain);
+};
+
+// Get spender wallet client (for backend operations)
+export async function getSpenderWalletClient(chain: Chain = baseSepolia) {
+  const spenderAccount = privateKeyToAccount(
+    process.env.SPENDER_PRIVATE_KEY! as Hex
+  );
+
+  return {
+    account: spenderAccount,
+    chain,
+  };
+} 

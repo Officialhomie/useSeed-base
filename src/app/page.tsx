@@ -1,7 +1,5 @@
 "use client";
 
-import { ConnectAndSIWE } from '@/components/ConnectAndSIWE';
-import { useAccount } from 'wagmi';
 import { useEffect, useState } from 'react';
 import '../components/basename-explorer.css';
 import '../components/navigation-bar.css';
@@ -9,15 +7,17 @@ import './page-styles.css';
 import './smart-wallet.css';
 import Link from 'next/link';
 import NavigationBar from '@/components/NavigationBar';
+import Subscribe from '@/components/Subscribe';
 
 export default function Home() {
-  const account = useAccount();
   const [mounted, setMounted] = useState(false);
 
   // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  if (!mounted) return null;
 
   return (
     <>
@@ -118,6 +118,64 @@ export default function Home() {
                 <p className="feature-description">
                   Set risk parameters and protect your savings with smart thresholds
                 </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="subscription-section py-20">
+          <div className="section-container">
+            <div className="section-header">
+              <h2 className="section-title">
+                <span className="gradient-text">Subscription</span> Plans
+              </h2>
+              <p className="section-description mb-12">
+                Unlock premium features with our subscription plans powered by Spend Permissions technology
+              </p>
+            </div>
+            
+            <div className="subscription-content">
+              <Subscribe />
+            </div>
+            
+            <div className="mt-16 bg-black/40 rounded-xl p-6 border border-gray-800">
+              <h3 className="text-xl font-semibold mb-4">How Spend Permissions Work</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-black/60 p-4 rounded-lg border border-gray-800">
+                  <div className="flex items-center mb-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center mr-3">
+                      <span className="text-blue-500 font-bold">1</span>
+                    </div>
+                    <h4 className="font-medium">Authorize Once</h4>
+                  </div>
+                  <p className="text-gray-400 text-sm">
+                    Sign a single transaction to authorize recurring payments without needing to approve each one
+                  </p>
+                </div>
+                
+                <div className="bg-black/60 p-4 rounded-lg border border-gray-800">
+                  <div className="flex items-center mb-3">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center mr-3">
+                      <span className="text-purple-500 font-bold">2</span>
+                    </div>
+                    <h4 className="font-medium">Automate Payments</h4>
+                  </div>
+                  <p className="text-gray-400 text-sm">
+                    Our protocol automatically collects your subscription fee on a regular schedule
+                  </p>
+                </div>
+                
+                <div className="bg-black/60 p-4 rounded-lg border border-gray-800">
+                  <div className="flex items-center mb-3">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center mr-3">
+                      <span className="text-green-500 font-bold">3</span>
+                    </div>
+                    <h4 className="font-medium">Stay in Control</h4>
+                  </div>
+                  <p className="text-gray-400 text-sm">
+                    Revoke permission at any time through your dashboard - you&apos;re always in full control
+                  </p>
+                </div>
               </div>
             </div>
           </div>
