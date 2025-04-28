@@ -1,0 +1,90 @@
+/* Dashboard Styles */
+
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  max-width: 1200px;
+  margin: 8rem auto 6rem;
+  padding: 0 1rem;
+}
+
+.dashboard-container {
+  width: 100%;
+}
+
+.dashboard-title {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-subtitle {
+  font-size: 1.125rem;
+  line-height: 1.75;
+  color: #a1a1aa;
+  margin-bottom: 3rem;
+  max-width: 600px;
+}
+
+.connect-wallet-section {
+  margin-bottom: 3rem;
+  background: rgba(10, 10, 25, 0.5);
+  border-radius: 1rem;
+  padding: 2rem;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+.dashboard-content {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 768px) {
+  .dashboard-content {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-content {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.dashboard-card {
+  background: rgba(10, 10, 25, 0.5);
+  border-radius: 1rem;
+  padding: 2rem;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  transition: all 0.3s ease;
+  height: 100%;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(79, 70, 229, 0.3);
+  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.1);
+}
+
+.card-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: white;
+}
+
+.card-content {
+  color: #a1a1aa;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.5rem;
+  color: #a1a1aa;
+} 

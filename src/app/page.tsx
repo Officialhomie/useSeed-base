@@ -1,11 +1,24 @@
-import BasenameExplorer from '@/components/BasenameExplorer';
-import NavigationBar from '@/components/NavigationBar';
-import SpendSaveWallet from '@/components/SpendSaveWallet';
+"use client";
+
+import { ConnectAndSIWE } from '@/components/ConnectAndSIWE';
+import { useAccount } from 'wagmi';
+import { useEffect, useState } from 'react';
 import '../components/basename-explorer.css';
 import '../components/navigation-bar.css';
 import './page-styles.css';
+import './smart-wallet.css';
+import Link from 'next/link';
+import NavigationBar from '@/components/NavigationBar';
 
 export default function Home() {
+  const account = useAccount();
+  const [mounted, setMounted] = useState(false);
+
+  // Handle hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <>
       <NavigationBar />
@@ -19,8 +32,13 @@ export default function Home() {
               Automate your savings and investments with our sophisticated DeFi protocol built on Uniswap V4
             </p>
             <div className="hero-buttons">
-              <button className="primary-button">Get Started</button>
-              <button className="secondary-button">View Documentation</button>
+              <Link href="/app-dashboard" className="primary-button">Get Started</Link>
+              <Link href="/smart-wallet" className="secondary-button flex items-center">
+                <span className="mr-2">Try Smart Wallet</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </Link>
             </div>
             <div className="hero-stats">
               <div className="stat-item">
@@ -42,7 +60,17 @@ export default function Home() {
           <div className="hero-graphics">
             <div className="hero-graphic-item">
               <div className="hero-wallet-container">
-                {/* <SpendSaveWallet /> */}
+                {/* Add your cool graphics here */}
+                <div className="relative wallet-icon-container">
+                  <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 opacity-75 blur"></div>
+                  <div className="relative bg-black rounded-full p-5">
+                    <svg className="w-16 h-16 text-blue-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M12 8V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M8 12H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -96,5 +124,15 @@ export default function Home() {
         </section>
       </main>
     </>
+  );
+}
+
+function FeatureCard({ icon, title, description }: { icon: string; title: string; description: string }) {
+  return (
+    <div className="bg-black/60 border border-gray-800 rounded-lg p-5 hover:border-blue-800 transition-colors feature-card">
+      <div className="text-2xl mb-2 feature-icon">{icon}</div>
+      <h3 className="font-medium text-lg text-white mb-2">{title}</h3>
+      <p className="text-gray-400 text-sm">{description}</p>
+    </div>
   );
 }
