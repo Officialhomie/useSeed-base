@@ -1,0 +1,178 @@
+/* Nebula Horizon - Advanced OnchainKit Custom Theme */
+
+/* Apply theme to OnchainKit components */
+:root {
+  --gradient-primary: linear-gradient(135deg, #0052ff 0%, #5e17eb 100%);
+  --gradient-secondary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --gradient-hover: linear-gradient(135deg, #0046db 0%, #4c13c2 100%);
+  --gradient-success: linear-gradient(135deg, #05b169 0%, #0ac18f 100%);
+  --gradient-error: linear-gradient(135deg, #e54666 0%, #ff3358 100%);
+  --shadow-sm: 0 2px 8px rgba(0, 82, 255, 0.08);
+  --shadow-md: 0 4px 20px rgba(0, 82, 255, 0.12);
+  --shadow-lg: 0 8px 30px rgba(0, 82, 255, 0.16);
+  --shadow-xl: 0 12px 40px rgba(0, 82, 255, 0.2);
+}
+
+/* Enhanced buttons for light mode */
+.custom-light [class*="onchainkit-button"] {
+  background-image: var(--gradient-primary);
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.custom-light [class*="onchainkit-button"]:hover {
+  background-image: var(--gradient-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.custom-light [class*="onchainkit-button"]:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Enhanced buttons for dark mode */
+.custom-dark [class*="onchainkit-button"] {
+  background-image: var(--gradient-secondary);
+  transition: all 0.2s ease;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+.custom-dark [class*="onchainkit-button"]:hover {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.custom-dark [class*="onchainkit-button"]:active {
+  transform: translateY(0);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+
+/* Card enhancements */
+.custom-light [class*="onchainkit-card"] {
+  border: 1px solid rgba(0, 82, 255, 0.1);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+}
+
+.custom-light [class*="onchainkit-card"]:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.custom-dark [class*="onchainkit-card"] {
+  background: rgba(18, 19, 24, 0.8);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(59, 130, 246, 0.2);
+  backdrop-filter: blur(12px);
+  transition: all 0.3s ease;
+}
+
+.custom-dark [class*="onchainkit-card"]:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* Input field enhancements */
+.custom-light [class*="onchainkit-input"] {
+  border: 2px solid rgba(0, 82, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.custom-light [class*="onchainkit-input"]:focus {
+  border-color: #0052ff;
+  box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.15);
+}
+
+.custom-dark [class*="onchainkit-input"] {
+  background: rgba(26, 27, 37, 0.8);
+  border: 2px solid rgba(59, 130, 246, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.custom-dark [class*="onchainkit-input"]:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+/* Success/Error state enhancements */
+.custom-light [class*="onchainkit-success"] {
+  background-image: var(--gradient-success);
+}
+
+.custom-light [class*="onchainkit-error"] {
+  background-image: var(--gradient-error);
+}
+
+.custom-dark [class*="onchainkit-success"] {
+  background: rgba(52, 211, 153, 0.2);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.3);
+}
+
+.custom-dark [class*="onchainkit-error"] {
+  background: rgba(255, 99, 132, 0.2);
+  border: 1px solid rgba(255, 99, 132, 0.4);
+  box-shadow: 0 0 15px rgba(255, 99, 132, 0.3);
+}
+
+/* Modal/Dialog enhancements */
+.custom-light [class*="onchainkit-modal"] {
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+}
+
+.custom-dark [class*="onchainkit-modal"] {
+  background: rgba(18, 19, 24, 0.85);
+  border-radius: 16px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(59, 130, 246, 0.2);
+  backdrop-filter: blur(16px);
+}
+
+/* Loading indicators */
+@keyframes glow {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.custom-light [class*="onchainkit-loading"] {
+  animation: glow 1.5s infinite ease-in-out;
+}
+
+.custom-dark [class*="onchainkit-loading"] {
+  animation: glow 1.5s infinite ease-in-out;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6));
+}
+
+/* Typography enhancements */
+.custom-light h1, .custom-light h2, .custom-light h3, 
+.custom-dark h1, .custom-dark h2, .custom-dark h3 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* Badge styling */
+.custom-light [class*="onchainkit-badge"] {
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: var(--shadow-sm);
+}
+
+.custom-dark [class*="onchainkit-badge"] {
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+} 

@@ -1,101 +1,100 @@
-import Image from "next/image";
+import BasenameExplorer from '@/components/BasenameExplorer';
+import NavigationBar from '@/components/NavigationBar';
+import SpendSaveWallet from '@/components/SpendSaveWallet';
+import '../components/basename-explorer.css';
+import '../components/navigation-bar.css';
+import './page-styles.css';
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+    <>
+      <NavigationBar />
+      <main className="main-content">
+        <section className="hero-section">
+          <div className="hero-content">
+            <h1 className="hero-title">
+              <span className="gradient-text">SpendSave</span> Protocol
+            </h1>
+            <p className="hero-subtitle">
+              Automate your savings and investments with our sophisticated DeFi protocol built on Uniswap V4
+            </p>
+            <div className="hero-buttons">
+              <button className="primary-button">Get Started</button>
+              <button className="secondary-button">View Documentation</button>
+            </div>
+            <div className="hero-stats">
+              <div className="stat-item">
+                <span className="stat-value">$4.2M</span>
+                <span className="stat-label">Total Savings</span>
+              </div>
+              <div className="stat-divider"></div>
+              <div className="stat-item">
+                <span className="stat-value">12.4K</span>
+                <span className="stat-label">Active Users</span>
+              </div>
+              <div className="stat-divider"></div>
+              <div className="stat-item">
+                <span className="stat-value">3.2%</span>
+                <span className="stat-label">Avg. APY</span>
+              </div>
+            </div>
+          </div>
+          <div className="hero-graphics">
+            <div className="hero-graphic-item">
+              <div className="hero-wallet-container">
+                {/* <SpendSaveWallet /> */}
+              </div>
+            </div>
+          </div>
+        </section>
+        
+        <section className="features-section">
+          <div className="section-container">
+            <div className="section-header">
+              <h2 className="section-title">
+                <span className="gradient-text">Smart Savings</span> Features
+              </h2>
+              <p className="section-description">
+                SpendSave protocol makes it easy to optimize your crypto savings and investments
+              </p>
+            </div>
+            
+            <div className="features-grid">
+              <div className="feature-card">
+                <div className="feature-icon">💰</div>
+                <h3 className="feature-title">Automated Savings</h3>
+                <p className="feature-description">
+                  Set up recurring deposits and automate your crypto savings strategy
+                </p>
+              </div>
+              
+              <div className="feature-card">
+                <div className="feature-icon">📈</div>
+                <h3 className="feature-title">Dollar-Cost Averaging</h3>
+                <p className="feature-description">
+                  Schedule regular investments to reduce the impact of volatility
+                </p>
+              </div>
+              
+              <div className="feature-card">
+                <div className="feature-icon">🔄</div>
+                <h3 className="feature-title">Yield Optimization</h3>
+                <p className="feature-description">
+                  Automatically allocate funds to the highest yielding protocols
+                </p>
+              </div>
+              
+              <div className="feature-card">
+                <div className="feature-icon">🛡️</div>
+                <h3 className="feature-title">Risk Management</h3>
+                <p className="feature-description">
+                  Set risk parameters and protect your savings with smart thresholds
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    </>
   );
 }

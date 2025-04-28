@@ -3,25 +3,151 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
   }
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* OnchainKit Custom Theme - Nebula Horizon */
+
+/* Light Mode */
+.custom-light {
+  /* Font and Shape */
+  --ock-font-family: 'Geist Sans', system-ui, sans-serif;
+  --ock-border-radius: 12px;
+  --ock-border-radius-inner: 8px;
+  
+  /* Text Colors */
+  --ock-text-inverse: #ffffff;
+  --ock-text-foreground: #1a1b25;
+  --ock-text-foreground-muted: #5a5f78;
+  --ock-text-error: #e54666;
+  --ock-text-primary: #0052ff;
+  --ock-text-success: #05b169;
+  --ock-text-warning: #f4b740;
+  --ock-text-disabled: #a0a3b1;
+  
+  /* Background Colors */
+  --ock-bg-default: #ffffff;
+  --ock-bg-default-hover: #f5f7ff;
+  --ock-bg-default-active: #ebefff;
+  --ock-bg-alternate: #f7f9fc;
+  --ock-bg-alternate-hover: #f0f4fa;
+  --ock-bg-alternate-active: #e8eef7;
+  --ock-bg-inverse: #1a1b25;
+  --ock-bg-inverse-hover: #252634;
+  --ock-bg-inverse-active: #303243;
+  --ock-bg-primary: #0052ff;
+  --ock-bg-primary-hover: #0046db;
+  --ock-bg-primary-active: #003bb8;
+  --ock-bg-primary-washed: rgba(0, 82, 255, 0.1);
+  --ock-bg-primary-disabled: rgba(0, 82, 255, 0.4);
+  --ock-bg-secondary: #f0f4fa;
+  --ock-bg-secondary-hover: #e8eef7;
+  --ock-bg-secondary-active: #dfe6f2;
+  --ock-bg-error: #fef0f2;
+  --ock-bg-warning: #fff8ec;
+  --ock-bg-success: #edfcf5;
+  --ock-bg-default-reverse: #1a1b25;
+  
+  /* Icon Colors */
+  --ock-icon-color-primary: #0052ff;
+  --ock-icon-color-foreground: #1a1b25;
+  --ock-icon-color-foreground-muted: #5a5f78;
+  --ock-icon-color-inverse: #ffffff;
+  --ock-icon-color-error: #e54666;
+  --ock-icon-color-success: #05b169;
+  --ock-icon-color-warning: #f4b740;
+  
+  /* Border Colors */
+  --ock-border-line-primary: rgba(0, 82, 255, 0.5);
+  --ock-border-line-default: rgba(26, 27, 37, 0.1);
+  --ock-border-line-heavy: rgba(26, 27, 37, 0.15);
+  --ock-border-line-inverse: rgba(255, 255, 255, 0.15);
+
+  /* Custom Shadows */
+  box-shadow: 0 4px 20px rgba(0, 82, 255, 0.08);
+}
+
+/* Dark Mode */
+.custom-dark {
+  /* Font and Shape */
+  --ock-font-family: 'Geist Sans', system-ui, sans-serif;
+  --ock-border-radius: 12px;
+  --ock-border-radius-inner: 8px;
+  
+  /* Text Colors */
+  --ock-text-inverse: #1a1b25;
+  --ock-text-foreground: #f7f9fc;
+  --ock-text-foreground-muted: #a0a3b1;
+  --ock-text-error: #ff6384;
+  --ock-text-primary: #3b82f6;
+  --ock-text-success: #34d399;
+  --ock-text-warning: #fbbf24;
+  --ock-text-disabled: #5a5f78;
+  
+  /* Background Colors */
+  --ock-bg-default: #121318;
+  --ock-bg-default-hover: #1a1b25;
+  --ock-bg-default-active: #252634;
+  --ock-bg-alternate: #1a1b25;
+  --ock-bg-alternate-hover: #252634;
+  --ock-bg-alternate-active: #303243;
+  --ock-bg-inverse: #f7f9fc;
+  --ock-bg-inverse-hover: #edf2f7;
+  --ock-bg-inverse-active: #e2e8f0;
+  --ock-bg-primary: #3b82f6;
+  --ock-bg-primary-hover: #2563eb;
+  --ock-bg-primary-active: #1d4ed8;
+  --ock-bg-primary-washed: rgba(59, 130, 246, 0.15);
+  --ock-bg-primary-disabled: rgba(59, 130, 246, 0.4);
+  --ock-bg-secondary: #242636;
+  --ock-bg-secondary-hover: #2e3045;
+  --ock-bg-secondary-active: #383a54;
+  --ock-bg-error: rgba(255, 99, 132, 0.15);
+  --ock-bg-warning: rgba(251, 191, 36, 0.15);
+  --ock-bg-success: rgba(52, 211, 153, 0.15);
+  --ock-bg-default-reverse: #f7f9fc;
+  
+  /* Icon Colors */
+  --ock-icon-color-primary: #3b82f6;
+  --ock-icon-color-foreground: #f7f9fc;
+  --ock-icon-color-foreground-muted: #a0a3b1;
+  --ock-icon-color-inverse: #1a1b25;
+  --ock-icon-color-error: #ff6384;
+  --ock-icon-color-success: #34d399;
+  --ock-icon-color-warning: #fbbf24;
+  
+  /* Border Colors */
+  --ock-border-line-primary: rgba(59, 130, 246, 0.5);
+  --ock-border-line-default: rgba(247, 249, 252, 0.1);
+  --ock-border-line-heavy: rgba(247, 249, 252, 0.15);
+  --ock-border-line-inverse: rgba(26, 27, 37, 0.15);
+
+  /* Enhanced Glow Effects */
+  box-shadow: 0 4px 28px rgba(59, 130, 246, 0.25);
 }
