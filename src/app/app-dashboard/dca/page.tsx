@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useAccount } from 'wagmi';
 import DashboardLayout from '@/components/DashboardLayout';
-import DashboardOverview from '@/components/DashboardOverview';
-import './dashboard.css';
+import DCAComponent from '@/components/DCAComponent';
 
-export default function AppDashboard() {
-  const { address } = useAccount();
+export default function DCADashboard() {
   const [mounted, setMounted] = useState(false);
 
   // Handle hydration
@@ -20,7 +17,8 @@ export default function AppDashboard() {
   return (
     <DashboardLayout>
       <main className="p-6 overflow-auto h-full">
-        <DashboardOverview />
+        <h1 className="text-2xl font-bold mb-6">DCA Strategies</h1>
+        <DCAComponent />
       </main>
     </DashboardLayout>
   );

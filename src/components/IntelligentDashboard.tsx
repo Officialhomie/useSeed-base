@@ -4,8 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useAccount, useBalance } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
 // Custom SVG Icons
 const IconArrowRight = () => (

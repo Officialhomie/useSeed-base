@@ -21,22 +21,24 @@ import {
   useReadContract,
   useWriteContract,
   useBalance,
-  useWaitForTransactionReceipt
+  useWaitForTransactionReceipt,
+  useSimulateContract
 } from 'wagmi';
 import DailySavingsABI from '../ABI/DailySavings.json';
 import SavingABI from '../ABI/Saving.json';
 import TokenABI from '../ABI/Token.json';
 import SlippageControlABI from '../ABI/SlippageControl.json';
 import './spendsave-wallet.css';
-import { formatUnits } from 'viem';
+import { formatUnits, parseUnits } from 'viem';
 import { toast } from 'react-hot-toast';
-import { parseEther } from 'ethers';
+import { FiArrowRight, FiCopy, FiCheck, FiPieChart, FiBarChart2, FiDollarSign, FiSettings, FiTrendingUp, FiGift } from 'react-icons/fi';
+import useWalletInteractions from '@/lib/hooks/useWalletInteractions';
 
-// Contract addresses - for production, use environment variables
-const DAILY_SAVINGS_CONTRACT = process.env.NEXT_PUBLIC_DAILY_SAVINGS_ADDRESS || "0x0000000000000000000000000000000000000000";
-const SAVINGS_CONTRACT = process.env.NEXT_PUBLIC_SAVINGS_ADDRESS || "0x0000000000000000000000000000000000000000";
-const TOKEN_CONTRACT = process.env.NEXT_PUBLIC_TOKEN_ADDRESS || "0x0000000000000000000000000000000000000000";
-const DEFAULT_TOKEN = process.env.NEXT_PUBLIC_DEFAULT_TOKEN || "0x0000000000000000000000000000000000000000";
+// Contract addresses - replace with actual contract addresses
+const DAILY_SAVINGS_CONTRACT = "0x4B5DF730c2e6b28E17013A1485E5d9BC41Efe021";
+const SAVINGS_CONTRACT = "0x2b7EB565019abb6b8e48a34A57A6939F257E6017";
+const TOKEN_CONTRACT = "0xd9145CCE52D386f254917e481eB44e9943F39138";
+const DEFAULT_TOKEN = "0xd9145CCE52D386f254917e481eB44e9943F39138"; // Default to TOKEN_CONTRACT
 
 // Define types for API response
 interface SavingsStatus {
@@ -80,7 +82,7 @@ const LoadingFallback = () => (
 const StatsFallback = () => (
   <div className="ss-stats-wrapper">
     <div className="ss-stats-header">
-      <span className="ss-stats-icon">📊</span>
+      <FiPieChart className="ss-stats-icon" />
       <h3>Your Savings Stats</h3>
     </div>
     <div className="ss-stats-grid">
@@ -122,30 +124,47 @@ const ErrorCard = ({ title, message, retryAction }: { title: string; message: st
 
 // Savings Stats Component
 const SavingsStats = () => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const { address, isConnected } = useAccount();
+  const [retryCount, setRetryCount] = useState(0);
   
-  // Get savings status from contract
+  // Get savings status from contract with better error handling
   const { data: savingsStatus, isLoading, isError, refetch } = useReadContract({
     address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
     abi: DailySavingsABI,
     functionName: 'getDailySavingsStatus',
-    args: [address as `0x${string}`, DEFAULT_TOKEN as `0x${string}`],
+    args: address ? [address as `0x${string}`, DEFAULT_TOKEN as `0x${string}`] : undefined,
+    query: {
+      retry: 2,
+      retryDelay: 1000,
+      gcTime: 0
+    }
   }) as { data: SavingsStatus | undefined, isLoading: boolean, isError: boolean, refetch: () => void };
   
-  // Get execution status for timing
+  // Get execution status for timing with better error handling
   const { data: executionStatus } = useReadContract({
     address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
     abi: DailySavingsABI,
     functionName: 'getDailyExecutionStatus',
-    args: [address as `0x${string}`, DEFAULT_TOKEN as `0x${string}`],
+    args: address ? [address as `0x${string}`, DEFAULT_TOKEN as `0x${string}`] : undefined,
+    query: {
+      retry: 2,
+      retryDelay: 1000,
+      gcTime: 0
+    }
   }) as { data: ExecutionStatus | undefined };
+
+  // Handle retry
+  const handleRetry = () => {
+    setRetryCount(prev => prev + 1);
+    refetch();
+  };
 
   // Format currency (ETH/USDC) to display amount
   const formatCurrency = (value: bigint | undefined): string => {
     if (!value) return "0.00";
     // Convert from wei to ETH (assuming 18 decimals)
-    return (Number(value) / 1e18).toFixed(2);
+    return formatUnits(value, 18);
   };
 
   // Calculate days until next DCA
@@ -201,11 +220,20 @@ const SavingsStats = () => {
 
     if (isError) {
       return (
-        <ErrorCard 
-          title="Data Error" 
-          message="Could not load savings data. Please try again later."
-          retryAction={refetch}
-        />
+        <div className="ss-error-container">
+          <div className="ss-error-icon">❌</div>
+          <h3 className="ss-error-title">Data Error</h3>
+          <p className="ss-error-message">
+            Could not load savings data. This could be due to network issues or invalid contract addresses.
+            Please check your connection and try again.
+          </p>
+          <button 
+            className="ss-retry-button" 
+            onClick={handleRetry}
+          >
+            Try Again
+          </button>
+        </div>
       );
     }
 
@@ -216,16 +244,23 @@ const SavingsStats = () => {
         <div className="ss-stat-item">
           <span className="ss-stat-label">Total Saved</span>
           <span className="ss-stat-value">
-            ${formatCurrency(savingsStatus?.currentAmount)}
+            <FiDollarSign className="ss-stat-icon-small" />
+            {formatCurrency(savingsStatus?.currentAmount)}
           </span>
         </div>
         <div className="ss-stat-item">
           <span className="ss-stat-label">APY</span>
-          <span className="ss-stat-value">3.2%</span>
+          <span className="ss-stat-value">
+            <FiTrendingUp className="ss-stat-icon-small" />
+            3.2%
+          </span>
         </div>
         <div className="ss-stat-item">
           <span className="ss-stat-label">Next DCA</span>
-          <span className="ss-stat-value">{daysUntilNextDCA()}</span>
+          <span className="ss-stat-value">
+            <FiBarChart2 className="ss-stat-icon-small" />
+            {daysUntilNextDCA()}
+          </span>
         </div>
         <div className="ss-stat-item ss-goal-item">
           <span className="ss-stat-label">Savings Goal</span>
@@ -245,329 +280,266 @@ const SavingsStats = () => {
     <div className="ss-stats-wrapper">
       <button className="ss-section-button" onClick={handleClick}>
         <div className="ss-stats-header">
-          <span className="ss-stats-icon">📊</span>
+          <FiPieChart className="ss-stats-icon" />
           <h3>Your Savings Stats</h3>
           <span className="ss-expand-icon">{isExpanded ? '▲' : '▼'}</span>
         </div>
       </button>
-      {isExpanded && renderContent()}
+      {isExpanded && (
+        <div className="ss-stats-content">
+          {renderContent()}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// User Address with Copy Function
+const UserAddressDisplay = ({ address }: { address: `0x${string}` | undefined }) => {
+  const { formattedAddress, copied, copyAddress } = useWalletInteractions();
+
+  if (!address) return null;
+
+  return (
+    <div className="ss-address-display">
+      <span className="ss-address-text">{formattedAddress}</span>
+      <button 
+        className="ss-copy-button" 
+        onClick={copyAddress} 
+        title={copied ? "Copied!" : "Copy address"}
+      >
+        {copied ? <FiCheck className="ss-icon-success" /> : <FiCopy />}
+      </button>
     </div>
   );
 };
 
 // Transactions component for deposits, withdrawals and DCA
 const TransactionActions = () => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const { address } = useAccount();
   const [amount, setAmount] = useState('');
-  const [savingsOption, setSavingsOption] = useState<'deposit' | 'withdraw' | 'dca' | null>(null);
+  const [activeOperation, setActiveOperation] = useState<'deposit' | 'withdraw' | 'dca' | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
   
-  // For transaction simulation
-  const [simulationStatus, setSimulationStatus] = useState<'idle' | 'simulating' | 'success' | 'error'>('idle');
-  const [simulationErrors, setSimulationErrors] = useState<{message: string; details: string} | null>(null);
-  const [simulationResults, setSimulationResults] = useState<{
-    success: boolean;
-    gasCost: string;
-    estimatedNetworkFee: string;
-    estimatedPriorityFee: string;
-    estimatedTime: string;
-    optimizationSuggestions: string[];
-  } | null>(null);
+  // Use our custom wallet interactions hook - only get what we need
+  const { 
+    setTransactionHash, 
+    isPending: txIsPending,
+    isSuccess: txIsSuccess
+  } = useWalletInteractions();
+  
+  // Use Wagmi hooks for contract interactions
+  const { writeContract, isPending: isWritePending } = useWriteContract();
+  
+  // Reset input error when amount changes
+  useEffect(() => {
+    setInputError(null);
+  }, [amount]);
 
-  // Use writeContract instead of writeAsync
-  const { writeContract: depositWrite } = useWriteContract();
-  const { writeContract: withdrawWrite } = useWriteContract();
-  const { writeContract: dcaWrite } = useWriteContract();
+  // Reset action when transaction succeeds
+  useEffect(() => {
+    if (txIsSuccess) {
+      setActiveOperation(null);
+    }
+  }, [txIsSuccess]);
+
+  // Validate amount format
+  const validateAmount = (value: string): boolean => {
+    // Allow empty string (for clearing input)
+    if (value === '') return true;
+    
+    // Check if it's a valid number with at most 6 decimal places
+    const regex = /^\d+(\.\d{0,6})?$/;
+    return regex.test(value);
+  };
+
+  // Handle amount change with validation
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (validateAmount(value)) {
+      setAmount(value);
+    }
+  };
+
+  // Deposit simulation
+  const { data: depositSimData, isError: isDepositSimError } = useSimulateContract({
+    address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
+    abi: DailySavingsABI,
+    functionName: 'deposit',
+    args: amount ? [DEFAULT_TOKEN as `0x${string}`, parseUnits(amount, 18)] : undefined,
+    query: {
+      enabled: !!amount && activeOperation === 'deposit'
+    }
+  });
+
+  // Withdraw simulation
+  const { data: withdrawSimData, isError: isWithdrawSimError } = useSimulateContract({
+    address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
+    abi: DailySavingsABI,
+    functionName: 'withdraw',
+    args: amount ? [DEFAULT_TOKEN as `0x${string}`, parseUnits(amount, 18)] : undefined,
+    query: {
+      enabled: !!amount && activeOperation === 'withdraw'
+    }
+  });
+
+  // DCA simulation
+  const { data: dcaSimData, isError: isDcaSimError } = useSimulateContract({
+    address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
+    abi: DailySavingsABI,
+    functionName: 'executeDCA',
+    args: [DEFAULT_TOKEN as `0x${string}`],
+    query: {
+      enabled: activeOperation === 'dca'
+    }
+  });
 
   const handleClick = () => {
     setIsExpanded(!isExpanded);
   };
 
-  // Simulate transaction for preview
-  const simulateTransaction = async (transactionParams: {
-    type: string;
-    amount?: string;
-    contractAddress: `0x${string}`;
-    functionName: string;
-    args: any[];
-  }) => {
-    setSimulationStatus('simulating');
-    setSimulationErrors(null);
-    setSimulationResults(null);
-    
-    try {
-      // In production, you would call a simulation API or use a provider to estimate gas
-      // For demo purposes, we're simulating the response
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // This is a mock response - in production, you would get this from chain interaction
-      const simulationResponse = {
-        success: true,
-        gasCost: "0.0021 ETH",
-        estimatedNetworkFee: "0.0015 ETH",
-        estimatedPriorityFee: "0.0006 ETH",
-        estimatedTime: "15 seconds",
-        optimizationSuggestions: [
-          "Consider batching multiple transactions to save on gas",
-          "Gas prices are higher than usual, consider waiting for lower network activity"
-        ]
-      };
-      
-      // Update with the simulation results
-      setSimulationResults(simulationResponse);
-      setSimulationStatus('success');
-      
-      // Show a toast with the simulation results
-      toast.success(`Transaction simulation complete: Estimated gas ${simulationResponse.gasCost}`);
-      
-    } catch (error) {
-      setSimulationStatus('error');
-      setSimulationErrors({
-        message: "Failed to simulate transaction. Please try again.",
-        details: error instanceof Error ? error.message : String(error)
-      });
-      
-      toast.error("Transaction simulation failed");
-    }
-  };
-
   const handleDeposit = async () => {
-    if (!address || !amount) return;
+    if (!address) {
+      toast.error('Please connect your wallet');
+      return;
+    }
     
-    // Set the current operation
-    setSavingsOption('deposit');
+    if (!amount || parseFloat(amount) <= 0) {
+      setInputError('Please enter a valid amount');
+      return;
+    }
+    
+    setActiveOperation('deposit');
     
     try {
-      if (simulationStatus !== 'success') {
-        // First simulate the transaction
-        await simulateTransaction({
-          type: 'deposit',
-          amount,
-          contractAddress: DAILY_SAVINGS_CONTRACT as `0x${string}`,
-          functionName: 'deposit',
-          args: [DEFAULT_TOKEN as `0x${string}`, parseEther(amount)]
-        });
-        return;
+      // Use the deposit simulation data from above
+      if (depositSimData) {
+        const hash = await writeContract(depositSimData.request);
+        setTransactionHash(hash);
+        toast.success('Deposit transaction submitted');
+        setAmount('');
+      } else {
+        toast.error('Please enter a valid amount');
+        setActiveOperation(null);
       }
-      
-      // If simulation was successful, proceed with the actual transaction
-      const parsedAmount = parseEther(amount);
-      
-      await depositWrite({
-        address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
-        abi: DailySavingsABI,
-        functionName: 'deposit',
-        args: [DEFAULT_TOKEN as `0x${string}`, parsedAmount],
-      });
-      
-      toast.success('Deposit successful!');
-      setAmount('');
-      setSimulationStatus('idle');
-      setSimulationResults(null);
     } catch (error) {
       console.error('Deposit error:', error);
       toast.error('Deposit failed. Please try again.');
-    } finally {
-      setSavingsOption(null);
+      setActiveOperation(null);
     }
   };
 
   const handleWithdraw = async () => {
-    if (!address || !amount) return;
+    if (!address) {
+      toast.error('Please connect your wallet');
+      return;
+    }
     
-    // Set the current operation
-    setSavingsOption('withdraw');
+    if (!amount || parseFloat(amount) <= 0) {
+      setInputError('Please enter a valid amount');
+      return;
+    }
+    
+    setActiveOperation('withdraw');
     
     try {
-      if (simulationStatus !== 'success') {
-        // First simulate the transaction
-        await simulateTransaction({
-          type: 'withdraw',
-          amount,
-          contractAddress: DAILY_SAVINGS_CONTRACT as `0x${string}`,
-          functionName: 'withdraw',
-          args: [DEFAULT_TOKEN as `0x${string}`, parseEther(amount)]
-        });
-        return;
+      if (withdrawSimData) {
+        const hash = await writeContract(withdrawSimData.request);
+        setTransactionHash(hash);
+        toast.success('Withdraw transaction submitted');
+        setAmount('');
+      } else {
+        toast.error('Please enter a valid amount');
+        setActiveOperation(null);
       }
-      
-      // If simulation was successful, proceed with the actual transaction
-      const parsedAmount = parseEther(amount);
-      
-      await withdrawWrite({
-        address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
-        abi: DailySavingsABI,
-        functionName: 'withdraw',
-        args: [DEFAULT_TOKEN as `0x${string}`, parsedAmount],
-      });
-      
-      toast.success('Withdrawal successful!');
-      setAmount('');
-      setSimulationStatus('idle');
-      setSimulationResults(null);
     } catch (error) {
-      console.error('Withdrawal error:', error);
-      toast.error('Withdrawal failed. Please try again.');
-    } finally {
-      setSavingsOption(null);
+      console.error('Withdraw error:', error);
+      toast.error('Withdraw failed. Please try again.');
+      setActiveOperation(null);
     }
   };
 
   const handleDCA = async () => {
-    if (!address) return;
+    if (!address) {
+      toast.error('Please connect your wallet');
+      return;
+    }
     
-    // Set the current operation
-    setSavingsOption('dca');
+    setActiveOperation('dca');
     
     try {
-      if (simulationStatus !== 'success') {
-        // First simulate the transaction
-        await simulateTransaction({
-          type: 'dca',
-          contractAddress: DAILY_SAVINGS_CONTRACT as `0x${string}`,
-          functionName: 'executeDCA',
-          args: [DEFAULT_TOKEN as `0x${string}`]
-        });
-        return;
+      if (dcaSimData) {
+        const hash = await writeContract(dcaSimData.request);
+        setTransactionHash(hash);
+        toast.success('DCA transaction submitted');
+      } else {
+        toast.error('DCA simulation failed. Please try again later.');
+        setActiveOperation(null);
       }
-      
-      // If simulation was successful, proceed with the actual transaction
-      await dcaWrite({
-        address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
-        abi: DailySavingsABI,
-        functionName: 'executeDCA',
-        args: [DEFAULT_TOKEN as `0x${string}`],
-      });
-      
-      toast.success('DCA execution successful!');
-      setSimulationStatus('idle');
-      setSimulationResults(null);
     } catch (error) {
       console.error('DCA error:', error);
       toast.error('DCA execution failed. Please try again.');
-    } finally {
-      setSavingsOption(null);
+      setActiveOperation(null);
     }
   };
 
-  const resetSimulation = () => {
-    setSimulationStatus('idle');
-    setSimulationResults(null);
-    setSimulationErrors(null);
-  };
+  const isLoading = isWritePending || txIsPending;
 
   const renderContent = () => {
     return (
       <>
-        {simulationStatus === 'success' && simulationResults && (
-          <div className="ss-simulation-card">
-            <div className="ss-simulation-header">
-              <h4>Transaction Preview</h4>
-              <button 
-                className="ss-close-preview" 
-                onClick={resetSimulation}
-                aria-label="Close preview"
-              >×</button>
-            </div>
-            <div className="ss-simulation-details">
-              <div className="ss-simulation-detail">
-                <span className="ss-detail-label">Estimated gas:</span>
-                <span className="ss-detail-value">{simulationResults.gasCost}</span>
-              </div>
-              <div className="ss-simulation-detail">
-                <span className="ss-detail-label">Network fee:</span>
-                <span className="ss-detail-value">{simulationResults.estimatedNetworkFee}</span>
-              </div>
-              <div className="ss-simulation-detail">
-                <span className="ss-detail-label">Estimated time:</span>
-                <span className="ss-detail-value">{simulationResults.estimatedTime}</span>
-              </div>
-            </div>
-            
-            <div className="ss-optimization-tips">
-              <h5>Optimization Tips</h5>
-              <ul>
-                {simulationResults.optimizationSuggestions.map((tip, index) => (
-                  <li key={index}>{tip}</li>
-                ))}
-              </ul>
-            </div>
-            
-            <div className="ss-confirm-action">
-              <button 
-                className={`ss-confirm-button ${savingsOption || ''}`}
-                onClick={() => {
-                  if (savingsOption === 'deposit') handleDeposit();
-                  else if (savingsOption === 'withdraw') handleWithdraw();
-                  else if (savingsOption === 'dca') handleDCA();
-                }}
-                disabled={!savingsOption || simulationStatus !== 'success'}
-              >
-                Confirm Transaction
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {simulationStatus === 'error' && simulationErrors && (
-          <ErrorCard
-            title="Simulation Error"
-            message={simulationErrors.message}
-            retryAction={resetSimulation}
-          />
-        )}
-        
         <div className="ss-amount-input-container">
-          <div className="ss-input-label">Amount</div>
-          <div className="ss-amount-input">
+          <div className="ss-input-label">Amount {inputError && <span className="ss-input-error">({inputError})</span>}</div>
+          <div className={`ss-amount-input ${inputError ? 'ss-input-error-border' : ''}`}>
             <span className="ss-currency-symbol">$</span>
             <input
               type="text"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={handleAmountChange}
               placeholder="0.00"
               className="ss-input"
-              disabled={simulationStatus === 'simulating'}
+              disabled={isLoading}
             />
           </div>
         </div>
         
         <div className="ss-actions-grid">
           <button 
-            className={`ss-action-button ss-deposit${savingsOption === 'deposit' && simulationStatus === 'simulating' ? ' ss-loading' : ''}`}
+            className={`ss-action-button ss-deposit ${activeOperation === 'deposit' && isLoading ? 'ss-loading' : ''}`}
             onClick={handleDeposit}
-            disabled={!address || !amount || simulationStatus === 'simulating' || (savingsOption !== null && savingsOption !== 'deposit')}
+            disabled={!address || isLoading}
           >
-            <span className="ss-action-icon">💰</span>
+            <FiDollarSign className="ss-action-icon" />
             <span className="ss-action-label">
-              {savingsOption === 'deposit' && simulationStatus === 'simulating' ? 'Simulating...' : 'Deposit'}
+              {activeOperation === 'deposit' && isLoading ? 'Processing...' : 'Deposit'}
             </span>
           </button>
           <button 
-            className={`ss-action-button ss-withdraw${savingsOption === 'withdraw' && simulationStatus === 'simulating' ? ' ss-loading' : ''}`}
+            className={`ss-action-button ss-withdraw ${activeOperation === 'withdraw' && isLoading ? 'ss-loading' : ''}`}
             onClick={handleWithdraw}
-            disabled={!address || !amount || simulationStatus === 'simulating' || (savingsOption !== null && savingsOption !== 'withdraw')}
+            disabled={!address || isLoading}
           >
-            <span className="ss-action-icon">💸</span>
+            <FiArrowRight className="ss-action-icon" />
             <span className="ss-action-label">
-              {savingsOption === 'withdraw' && simulationStatus === 'simulating' ? 'Simulating...' : 'Withdraw'}
+              {activeOperation === 'withdraw' && isLoading ? 'Processing...' : 'Withdraw'}
             </span>
           </button>
           <button 
-            className={`ss-action-button ss-dca${savingsOption === 'dca' && simulationStatus === 'simulating' ? ' ss-loading' : ''}`}
+            className={`ss-action-button ss-dca ${activeOperation === 'dca' && isLoading ? 'ss-loading' : ''}`}
             onClick={handleDCA}
-            disabled={!address || simulationStatus === 'simulating' || (savingsOption !== null && savingsOption !== 'dca')}
+            disabled={!address || isLoading}
           >
-            <span className="ss-action-icon">📈</span>
+            <FiBarChart2 className="ss-action-icon" />
             <span className="ss-action-label">
-              {savingsOption === 'dca' && simulationStatus === 'simulating' ? 'Simulating...' : 'DCA'}
+              {activeOperation === 'dca' && isLoading ? 'Processing...' : 'DCA'}
             </span>
           </button>
           <button 
             className="ss-action-button ss-rewards"
-            disabled={!address}
+            disabled={!address || isLoading}
           >
-            <span className="ss-action-icon">🎁</span>
+            <FiGift className="ss-action-icon" />
             <span className="ss-action-label">Rewards</span>
           </button>
         </div>
@@ -579,7 +551,7 @@ const TransactionActions = () => {
     <div className="ss-transaction-actions">
       <button className="ss-section-button" onClick={handleClick}>
         <div className="ss-actions-header">
-          <span className="ss-actions-icon">💸</span>
+          <FiSettings className="ss-actions-icon" />
           <h3 className="ss-actions-title">Quick Actions</h3>
           <span className="ss-expand-icon">{isExpanded ? '▲' : '▼'}</span>
         </div>
@@ -600,17 +572,43 @@ const NotificationBadge = ({ count }: { count: number }) => {
   );
 };
 
-// Main Wallet Component
+// Add styles to fix Identity rendering issues
+const IdentityContainer = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <div className="ss-identity-container" style={{ minHeight: '24px' }}>
+      {children}
+    </div>
+  );
+};
+
+// Update the SafeIdentity component to include necessary styling
+const SafeIdentity = ({ address, children }: { address: `0x${string}` | undefined, children: React.ReactNode }) => {
+  if (!address) return null;
+  
+  return (
+    <IdentityContainer>
+      <Identity address={address}>
+        {children}
+      </Identity>
+    </IdentityContainer>
+  );
+};
+
+// Main Wallet Component - Update to improve nav integration
 export default function SpendSaveWallet() {
   const { address, isConnected } = useAccount();
   const [notificationCount, setNotificationCount] = useState(0);
+  const walletInteractions = useWalletInteractions();
   
   // Check for pending daily savings (notifications)
   const { data: hasPendingSavings, isSuccess } = useReadContract({
     address: DAILY_SAVINGS_CONTRACT as `0x${string}`,
     abi: DailySavingsABI,
     functionName: 'hasPendingDailySavings',
-    args: [address],
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address,
+    }
   });
 
   // Update notification count when data changes
@@ -619,44 +617,80 @@ export default function SpendSaveWallet() {
       setNotificationCount(prev => Math.min(prev + 1, 9));
     }
   }, [hasPendingSavings, isSuccess]);
+
+  // Show pending indicator only when there's an actual pending transaction
+  const txIsPending = walletInteractions.isPending && Boolean(walletInteractions.txReceipt);
   
   return (
     <div className="spendsave-wallet-container">
       <Wallet>
         <ConnectWallet 
           className="ss-connect-button" 
-          disconnectedLabel="Connect Wallet"
+          disconnectedLabel="Connect"
+          data-connected={isConnected ? "true" : "false"}
         >
-          <div className="ss-wallet-connected">
-            <div className="ss-avatar-container">
-              <Avatar className="ss-avatar" />
-              <NotificationBadge count={notificationCount} />
+          {isConnected ? (
+            <div className="ss-wallet-connected">
+              <div className="ss-avatar-container">
+                {address && (
+                  <SafeIdentity address={address}>
+                    <Avatar className="ss-avatar" />
+                  </SafeIdentity>
+                )}
+                {notificationCount > 0 && <NotificationBadge count={notificationCount} />}
+              </div>
+              <div className="ss-connected-info">
+                {address && (
+                  <SafeIdentity address={address}>
+                    <Name className="ss-name" />
+                  </SafeIdentity>
+                )}
+                <div className="ss-balance-text">
+                  {address && !txIsPending && (
+                    <SafeIdentity address={address}>
+                      <EthBalance className="ss-balance" />
+                    </SafeIdentity>
+                  )}
+                  {txIsPending && (
+                    <span className="ss-pending-indicator">Processing...</span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="ss-connected-info">
-              <Name className="ss-name" />
-              <EthBalance className="ss-balance" />
+          ) : (
+            <div className="ss-connect-button-content">
+              <span className="ss-connect-icon">🔗</span>
+              <span>Connect</span>
             </div>
-          </div>
+          )}
         </ConnectWallet>
         
         <WalletDropdown className="ss-wallet-dropdown">
           {/* Custom Header - Fixed at the top */}
-          <Identity
-            className="ss-wallet-header"
-            hasCopyAddressOnClick
-          >
-            <div className="ss-identity-content">
-              <Avatar className="ss-avatar-large" />
-              <div className="ss-identity-info">
-                <Name className="ss-name-large" />
-                <Address className="ss-address" />
+          <div className="ss-wallet-header">
+            <div className="ss-wallet-header-content">
+              {address && (
+                <SafeIdentity address={address}>
+                  <Avatar className="ss-avatar-large" />
+                </SafeIdentity>
+              )}
+              <div className="ss-wallet-header-info">
+                {address && (
+                  <SafeIdentity address={address}>
+                    <Name className="ss-name-large" />
+                  </SafeIdentity>
+                )}
+                <UserAddressDisplay address={address} />
                 <div className="ss-balance-container">
-                  <EthBalance className="ss-balance-large" />
-                  <span className="ss-balance-label">Available</span>
+                  {address && (
+                    <SafeIdentity address={address}>
+                      <EthBalance className="ss-balance-large" />
+                    </SafeIdentity>
+                  )}
                 </div>
               </div>
             </div>
-          </Identity>
+          </div>
           
           {/* Scrollable Content Container */}
           <div className="ss-wallet-scrollable-content">
@@ -671,7 +705,7 @@ export default function SpendSaveWallet() {
             <ErrorBoundary fallback={
               <div className="ss-transaction-actions">
                 <div className="ss-actions-header">
-                  <span className="ss-actions-icon">💸</span>
+                  <FiSettings className="ss-actions-icon" />
                   <h3 className="ss-actions-title">Quick Actions</h3>
                 </div>
                 <ErrorCard
@@ -683,35 +717,45 @@ export default function SpendSaveWallet() {
               <TransactionActions />
             </ErrorBoundary>
             
-            {/* Standard Links */}
+            {/* Navigation Links */}
             <div className="ss-wallet-links">
-              <WalletDropdownBasename className="ss-dropdown-link" />
+              <h3 className="ss-links-title">SpendSave Menu</h3>
               
-              <WalletDropdownLink
-                className="ss-dropdown-link"
-                icon="plus"
+              <a 
+                className="ss-dropdown-link" 
                 href="/dashboard"
               >
-                Savings Dashboard
-              </WalletDropdownLink>
+                <FiPieChart className="ss-link-icon" />
+                <span>Savings Dashboard</span>
+              </a>
               
-              <WalletDropdownLink
+              <a
                 className="ss-dropdown-link"
-                icon="gear"
                 href="/settings"
               >
-                Savings Strategy
-              </WalletDropdownLink>
+                <FiSettings className="ss-link-icon" />
+                <span>Savings Strategy</span>
+              </a>
               
-              <WalletDropdownLink
+              <a
                 className="ss-dropdown-link"
-                icon="chart"
                 href="/analytics"
               >
-                Performance Analytics
-              </WalletDropdownLink>
+                <FiBarChart2 className="ss-link-icon" />
+                <span>Performance Analytics</span>
+              </a>
               
-              <WalletDropdownDisconnect className="ss-disconnect-button" />
+              <WalletDropdownBasename className="ss-dropdown-link ss-basename-link" />
+              
+              <button 
+                className="ss-disconnect-button"
+                onClick={() => {
+                  // Handle disconnect
+                  console.log("Disconnect clicked");
+                }}
+              >
+                Disconnect
+              </button>
             </div>
           </div>
         </WalletDropdown>

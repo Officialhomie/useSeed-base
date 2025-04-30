@@ -5,7 +5,9 @@ import { useAccount, useBalance } from "wagmi";
 import { Address } from "viem";
 import { motion } from "framer-motion";
 
-// Sample chart component (simplified for this demo)
+// EXAMPLE COMPONENT: Simplified chart for demonstration purposes only
+// In production, consider using a proper charting library like recharts or chart.js
+// This avoids heavy calculations in the UI thread
 const SimpleAreaChart = ({ data, color }: { data: number[], color: string }) => {
   const max = Math.max(...data);
   const min = Math.min(...data);
@@ -41,7 +43,9 @@ const SimpleAreaChart = ({ data, color }: { data: number[], color: string }) => 
   );
 };
 
-// Activity item component
+// EXAMPLE COMPONENT: Activity item for demonstration
+// In production, this would display actual transaction data from blockchain events
+// or from a database of user interactions
 const ActivityItem = ({ 
   title, 
   description, 
@@ -99,7 +103,7 @@ export default function DashboardOverview() {
   const [totalSavings, setTotalSavings] = useState("0.00");
   const [totalYield, setTotalYield] = useState("0.00");
   
-  // Sample data state
+  // EXAMPLE DATA: Sample chart data for demonstration purposes only
   const [savingsData] = useState([10, 13, 15, 25, 35, 40, 50, 60, 65, 50, 70, 95]);
   const [yieldData] = useState([5, 10, 15, 20, 25, 30, 25, 40, 45, 50, 60, 70]);
   const [investmentData] = useState([2, 5, 10, 15, 25, 35, 45, 40, 60, 70, 85, 100]);
@@ -107,7 +111,7 @@ export default function DashboardOverview() {
   // Get user account info
   const { address } = useAccount();
   
-  // Demo data for recent activity
+  // EXAMPLE DATA: Sample activity data for demonstration purposes only
   const recentActivity = [
     {
       title: "Daily Savings Plan",
@@ -143,7 +147,7 @@ export default function DashboardOverview() {
     }
   ];
 
-  // Get ETH balance for the user
+  // Get ETH balance for the user - using single RPC call to avoid chain congestion
   const { data: ethBalance } = useBalance({
     address: address as Address | undefined,
   });
@@ -152,12 +156,18 @@ export default function DashboardOverview() {
   useEffect(() => {
     setMounted(true);
     
-    // Simulate loading data from contracts
+    // EXAMPLE: Simulate loading data from contracts
     // In a real app, you would fetch this from your contracts
     setTimeout(() => {
       setTotalSavings("1.45");
       setTotalYield("0.32");
     }, 1000);
+
+    // OPTIMIZATION NOTE: In production, bundle multiple data requests into a single call
+    // to minimize RPC requests to the blockchain. Consider using multicall patterns or
+    // batched requests when implementing actual blockchain interactions.
+    // Example: Instead of separate calls for savings, yield, and investments,
+    // create a single contract method that returns all needed data in one transaction.
   }, []);
 
   if (!mounted) return null;
@@ -188,6 +198,7 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div className="mt-4">
+            {/* EXAMPLE: Sample chart for demonstration purposes */}
             <SimpleAreaChart data={[10, 15, 25, 35, 30, 40, 50, 65, 75, 70, 90, 100]} color="#3b82f6" />
           </div>
         </motion.div>
@@ -201,6 +212,7 @@ export default function DashboardOverview() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-gray-400 text-sm">Total Savings</p>
+              {/* EXAMPLE: Example value for demonstration */}
               <h3 className="text-white text-2xl font-bold mt-1">{totalSavings} ETH</h3>
             </div>
             <div className="bg-green-500/20 p-3 rounded-lg">
@@ -210,6 +222,7 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div className="mt-4">
+            {/* EXAMPLE: Sample chart for demonstration */}
             <SimpleAreaChart data={savingsData} color="#22c55e" />
           </div>
         </motion.div>
@@ -223,6 +236,7 @@ export default function DashboardOverview() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-gray-400 text-sm">Total Yield</p>
+              {/* EXAMPLE: Example yield value for demonstration */}
               <h3 className="text-white text-2xl font-bold mt-1">{totalYield} ETH</h3>
             </div>
             <div className="bg-yellow-500/20 p-3 rounded-lg">
@@ -233,6 +247,7 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div className="mt-4">
+            {/* EXAMPLE: Sample chart for demonstration */}
             <SimpleAreaChart data={yieldData} color="#eab308" />
           </div>
         </motion.div>
@@ -246,6 +261,7 @@ export default function DashboardOverview() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-gray-400 text-sm">DCA Investments</p>
+              {/* EXAMPLE: Example DCA value for demonstration */}
               <h3 className="text-white text-2xl font-bold mt-1">100 USDC</h3>
             </div>
             <div className="bg-purple-500/20 p-3 rounded-lg">
@@ -255,6 +271,7 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div className="mt-4">
+            {/* EXAMPLE: Sample chart for demonstration */}
             <SimpleAreaChart data={investmentData} color="#a855f7" />
           </div>
         </motion.div>
@@ -341,6 +358,7 @@ export default function DashboardOverview() {
             <div>
               <div className="flex justify-between items-center mb-2">
                 <p className="text-sm text-gray-400">Savings Progress</p>
+                {/* EXAMPLE: Sample progress percentage for demonstration */}
                 <span className="text-sm font-medium text-white">45%</span>
               </div>
               <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
@@ -351,6 +369,7 @@ export default function DashboardOverview() {
             <div>
               <div className="flex justify-between items-center mb-2">
                 <p className="text-sm text-gray-400">Yield Rate</p>
+                {/* EXAMPLE: Sample yield rate for demonstration */}
                 <span className="text-sm font-medium text-green-500">+6.2%</span>
               </div>
               <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
@@ -361,6 +380,7 @@ export default function DashboardOverview() {
             <div>
               <div className="flex justify-between items-center mb-2">
                 <p className="text-sm text-gray-400">DCA Completion</p>
+                {/* EXAMPLE: Sample DCA completion for demonstration */}
                 <span className="text-sm font-medium text-white">75%</span>
               </div>
               <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
@@ -370,6 +390,7 @@ export default function DashboardOverview() {
             
             <div className="pt-4 border-t border-gray-800 mt-4">
               <h4 className="text-white font-medium mb-3">Asset Allocation</h4>
+              {/* EXAMPLE: Sample asset allocation for demonstration */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center">

@@ -7,6 +7,12 @@ import { useAccount, useConnect, useConnectors, useSignTypedData, useBalance } f
 import { Address, Hex, parseUnits } from "viem";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
 import AdvancedOnboarding from "./AdvancedOnboarding";
+import SavingsStrategySetup from "./SavingsStrategySetup";
+
+// Define valid savings frequency types to match the expected type in AdvancedOnboarding
+type SavingsFrequency = "daily" | "weekly" | "monthly";
+// Define valid risk tolerance types
+type RiskTolerance = "conservative" | "balanced" | "aggressive";
 
 // Step indicators component
 const StepIndicators = ({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) => {
@@ -33,10 +39,10 @@ export default function OnboardingFlow() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     savingsGoal: "1000",
-    savingsFrequency: "weekly",
+    savingsFrequency: "weekly" as SavingsFrequency,
     savingsAmount: "50",
     targetToken: CONTRACT_ADDRESSES.ETH,
-    riskTolerance: "medium",
+    riskTolerance: "balanced" as RiskTolerance, // Default to balanced risk
     selectedSubscription: "pro",
     selectedStrategy: ""
   });
@@ -48,7 +54,6 @@ export default function OnboardingFlow() {
   const { signTypedDataAsync } = useSignTypedData();
   const { data: _balanceData } = useBalance({
     address,
-    watch: true,
   });
   
   // Handle hydration
@@ -156,7 +161,22 @@ export default function OnboardingFlow() {
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === "savingsFrequency") {
+      // Ensure savingsFrequency is properly typed when updated
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value as SavingsFrequency 
+      }));
+    } else if (name === "riskTolerance") {
+      // Ensure riskTolerance is properly typed when updated
+      setFormData(prev => ({
+        ...prev,
+        [name]: value as RiskTolerance
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
   
   const nextStep = () => {
@@ -171,7 +191,7 @@ export default function OnboardingFlow() {
     }
   };
   
-  const totalSteps = 5;
+  const totalSteps = 6;
   
   if (!mounted) return null;
   
@@ -288,6 +308,17 @@ export default function OnboardingFlow() {
             )}
             
             {currentStep === 2 && (
+              <div>
+                <h2 className="text-3xl font-bold mb-4 text-center">Configure Your Savings Strategy</h2>
+                <p className="text-gray-400 mb-8 text-center">
+                  Define how you want to automatically save when making swaps.
+                </p>
+                
+                <SavingsStrategySetup onComplete={nextStep} />
+              </div>
+            )}
+            
+            {currentStep === 3 && (
               <AdvancedOnboarding
                 formData={formData}
                 onStrategySelect={(strategy) => {
@@ -295,14 +326,14 @@ export default function OnboardingFlow() {
                   setFormData(prev => ({
                     ...prev,
                     selectedStrategy: strategy.id,
-                    riskTolerance: strategy.riskLevel
+                    riskTolerance: strategy.riskLevel as RiskTolerance
                   }));
                 }}
                 currentStep={currentStep}
               />
             )}
             
-            {currentStep === 3 && (
+            {currentStep === 4 && (
               <div>
                 <h2 className="text-3xl font-bold mb-4 text-center">Choose Your Subscription</h2>
                 <p className="text-gray-400 mb-8 text-center">
@@ -380,7 +411,7 @@ export default function OnboardingFlow() {
               </div>
             )}
             
-            {currentStep === 4 && (
+            {currentStep === 5 && (
               <div className="text-center">
                 <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
                   <svg className="w-10 h-10 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -454,7 +485,7 @@ export default function OnboardingFlow() {
               Back
             </button>
             
-            {currentStep === 3 ? (
+            {currentStep === 4 ? (
               <button
                 className={cn(
                   pressable.primary,
@@ -485,21 +516,23 @@ export default function OnboardingFlow() {
                 </span>
               </button>
             ) : (
-              <button
-                className={cn(
-                  pressable.primary,
-                  "px-8 py-3 rounded-xl",
-                  "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500"
-                )}
-                onClick={nextStep}
-              >
-                <span className={cn(text.headline, color.inverse, "flex items-center")}>
-                  Continue
-                  <svg className="w-5 h-5 ml-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
-              </button>
+              currentStep !== 2 && (
+                <button
+                  className={cn(
+                    pressable.primary,
+                    "px-8 py-3 rounded-xl",
+                    "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500"
+                  )}
+                  onClick={nextStep}
+                >
+                  <span className={cn(text.headline, color.inverse, "flex items-center")}>
+                    Continue
+                    <svg className="w-5 h-5 ml-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M5 12H19M19 12L13 6M19 12L13 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </span>
+                </button>
+              )
             )}
           </div>
         )}

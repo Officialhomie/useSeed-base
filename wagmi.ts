@@ -30,19 +30,20 @@ export const config = createConfig({
   connectors: [cbWalletConnector],
   ssr: true,
   transports: {
-    [baseSepolia.id]: http(`https://sepolia.base.org`, {
-      retryCount: 3,
-      retryDelay: 1000,
-      timeout: 30000,
+    [baseSepolia.id]: http(`https://base-sepolia-rpc.publicnode.com`, {
+      retryCount: 5,
+      retryDelay: 1500, // Fixed retry delay of 1.5 seconds
+      timeout: 15000,
       fetchOptions: {
         cache: 'no-store',
         credentials: 'omit',
+        priority: 'high',
         headers: {
           'Content-Type': 'application/json',
         },
       },
     }),
-    [base.id]: http(`https://mainnet.base.org`, {
+    [base.id]: http(`https://base-mainnet-rpc.publicnode.com`, {
       retryCount: 3,
       retryDelay: 1000,
       timeout: 30000,

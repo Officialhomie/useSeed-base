@@ -15,6 +15,13 @@ enum SavingsTokenType {
   SPECIFIC = 2
 }
 
+// Define token options for the dropdown
+const TOKEN_OPTIONS = [
+  { value: CONTRACT_ADDRESSES.ETH, label: "ETH" },
+  { value: CONTRACT_ADDRESSES.USDC, label: "USDC" },
+  { value: CONTRACT_ADDRESSES.WETH, label: "WETH" },
+];
+
 export default function SavingsStrategySetup({ onComplete }: { onComplete: () => void }) {
   const { address } = useAccount();
   const [strategy, setStrategy] = useState({
@@ -30,24 +37,26 @@ export default function SavingsStrategySetup({ onComplete }: { onComplete: () =>
 
   // Get existing strategy if available
   const { data: existingStrategy } = useReadContract({
-    address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE as Address,
+    address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
     abi: SpendSaveStorageABI,
     functionName: 'getUserSavingStrategy',
-    args: [address],
-    enabled: !!address,
+    args: address ? [address] : undefined,
   });
 
   // Initialize strategy from existing data if available
   useEffect(() => {
-    if (existingStrategy && existingStrategy.hasStrategy) {
-      setStrategy({
-        percentage: Number(existingStrategy.currentPercentage) / 100, // Convert from basis points (e.g., 1000 = 10%)
-        autoIncrement: Number(existingStrategy.autoIncrement) / 100, 
-        maxPercentage: Number(existingStrategy.maxPercentage) / 100,
-        roundUpSavings: existingStrategy.roundUpSavings,
-        savingsTokenType: existingStrategy.savingsTokenType,
-        specificToken: existingStrategy.specificSavingsToken,
-      });
+    if (existingStrategy && typeof existingStrategy === 'object') {
+      const strategyData = existingStrategy as any;
+      if (strategyData.hasStrategy) {
+        setStrategy({
+          percentage: Number(strategyData.currentPercentage) / 100, // Convert from basis points (e.g., 1000 = 10%)
+          autoIncrement: Number(strategyData.autoIncrement) / 100, 
+          maxPercentage: Number(strategyData.maxPercentage) / 100,
+          roundUpSavings: strategyData.roundUpSavings,
+          savingsTokenType: strategyData.savingsTokenType as SavingsTokenType,
+          specificToken: strategyData.specificSavingsToken || CONTRACT_ADDRESSES.ETH,
+        });
+      }
     }
   }, [existingStrategy]);
 
@@ -82,27 +91,33 @@ export default function SavingsStrategySetup({ onComplete }: { onComplete: () =>
 
       // Call contract to set saving strategy
       writeContract({
-        address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE as Address,
+        address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
         abi: SpendSaveStorageABI,
         functionName: 'setUserSavingStrategy',
         args: [
           address,
-          percentageBasisPoints,
-          autoIncrementBasisPoints,
-          maxPercentageBasisPoints,
-          0, // goalAmount - we don't set it here
+          BigInt(percentageBasisPoints),
+          BigInt(autoIncrementBasisPoints),
+          BigInt(maxPercentageBasisPoints),
+          BigInt(0), // goalAmount - we don't set it here
           strategy.roundUpSavings,
           false, // enableDCA - we don't enable it here
           strategy.savingsTokenType,
           strategy.savingsTokenType === SavingsTokenType.SPECIFIC 
             ? strategy.specificToken
-            : "0x0000000000000000000000000000000000000000" // Zero address if not specific token
+            : "0x0000000000000000000000000000000000000000" as Address // Zero address if not specific token
         ]
       });
     } catch (error) {
       console.error("Error setting saving strategy:", error);
       setLoading(false);
     }
+  };
+
+  // Helper to get token label for display
+  const getTokenLabel = (tokenAddress: Address) => {
+    const token = TOKEN_OPTIONS.find(t => t.value === tokenAddress);
+    return token ? token.label : 'Unknown Token';
   };
 
   return (
@@ -217,9 +232,11 @@ export default function SavingsStrategySetup({ onComplete }: { onComplete: () =>
               value={strategy.specificToken}
               onChange={(e) => setStrategy({...strategy, specificToken: e.target.value as Address})}
             >
-              <option value={CONTRACT_ADDRESSES.ETH}>ETH</option>
-              <option value={CONTRACT_ADDRESSES.USDC}>USDC</option>
-              <option value={CONTRACT_ADDRESSES.WETH}>WETH</option>
+              {TOKEN_OPTIONS.map((token) => (
+                <option key={token.value} value={token.value}>
+                  {token.label}
+                </option>
+              ))}
             </select>
           </div>
         )}

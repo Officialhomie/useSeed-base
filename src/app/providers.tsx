@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode, useEffect } from "react";
 import { WagmiProvider } from "wagmi";
 import { config } from "../../wagmi";
+import NotificationProvider from '@/components/NotificationManager';
 
 // Optional components for loading and error states
 const LoadingState = (): JSX.Element => (
@@ -41,7 +42,10 @@ const ErrorBoundary = ({
         try {
           // Add timeout to fetch requests
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+            console.warn(`Fetch timeout for ${typeof args[0] === 'string' ? args[0] : 'request'}`);
+          }, 10000); // Reduced timeout to 10 seconds
           
           const fetchOptions = args[1] || {};
           const newOptions = {
@@ -52,12 +56,46 @@ const ErrorBoundary = ({
           const response = await originalFetch(args[0], newOptions);
           clearTimeout(timeoutId);
           
-          if (!response.ok && response.status >= 500) {
-            console.warn(`Fetch error for ${args[0]}:`, response.status);
+          if (!response.ok) {
+            // Handle specific error statuses
+            if (response.status >= 500) {
+              console.warn(`Server error (${response.status}) for ${typeof args[0] === 'string' ? args[0] : 'request'}`);
+              
+              // If request is to Base Sepolia and it fails, try to use the fallback
+              if (typeof args[0] === 'string' && args[0].includes('sepolia.base.org')) {
+                console.info('Attempting to use fallback RPC...');
+                const fallbackUrl = args[0].replace('sepolia.base.org', 'base-sepolia-rpc.publicnode.com');
+                const fallbackResponse = await originalFetch(fallbackUrl, newOptions);
+                return fallbackResponse;
+              }
+            }
           }
           return response;
         } catch (error) {
           console.error('Fetch operation failed:', error);
+          
+          // If request is to Base Sepolia and it fails, try to use the fallback
+          if (typeof args[0] === 'string' && args[0].includes('sepolia.base.org')) {
+            try {
+              console.info('Error caught, attempting to use fallback RPC...');
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
+              
+              const fetchOptions = args[1] || {};
+              const newOptions = {
+                ...fetchOptions,
+                signal: controller.signal,
+              };
+              
+              const fallbackUrl = args[0].replace('sepolia.base.org', 'base-sepolia-rpc.publicnode.com');
+              const fallbackResponse = await originalFetch(fallbackUrl, newOptions);
+              clearTimeout(timeoutId);
+              return fallbackResponse;
+            } catch (fallbackError) {
+              console.error('Fallback RPC also failed:', fallbackError);
+            }
+          }
+          
           // Create a more detailed error response
           return new Response(JSON.stringify({ 
             error: 'Network request failed', 
@@ -98,90 +136,117 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
   const [isLoading, setIsLoading] = useState(true);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   
-  // Handle static asset preload
+  // Handle asset loading
   useEffect(() => {
-    const preloadAssets = () => {
+    // Modified asset preloading that doesn't use link rel="preload"
+    // This avoids the "preloaded but not used" warnings
+    const loadAssets = () => {
       try {
-        // Preload critical assets used by the wallet with correct paths
-        const importantAssets = [
-          '/static/css/smart-wallet.css', 
-          '/logo.png'
+        // Add the smart-wallet.css directly with the correct content
+        const createSmartWalletCSS = () => {
+          const style = document.createElement('style');
+          style.id = 'smart-wallet-css';
+          // Add minimal CSS needed for the wallet component
+          style.textContent = `
+            .smart-wallet-dropdown {
+              z-index: 100;
+              position: relative;
+            }
+            .smart-wallet-avatar {
+              border-radius: 50%;
+              overflow: hidden;
+            }
+            .smart-wallet-name {
+              font-weight: 600;
+            }
+            .smart-wallet-address {
+              font-family: monospace;
+              font-size: 0.85em;
+            }
+            .smart-wallet-balance {
+              font-size: 0.9em;
+            }
+          `;
+          return style;
+        };
+        
+        // Only add if it doesn't exist already
+        if (!document.getElementById('smart-wallet-css')) {
+          document.head.appendChild(createSmartWalletCSS());
+        }
+        
+        // For images, we'll preload them into the browser cache only if needed
+        const imageAssets = [
+          '/logo.png'  // Keep simple path
         ];
         
-        // Remove any existing preloads to avoid duplicates
-        document.querySelectorAll('link[rel="preload"]').forEach(link => {
-          link.remove();
-        });
-        
-        // Add new preloads with proper attributes
-        importantAssets.forEach(asset => {
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.href = asset;
-          
-          // Set appropriate 'as' attribute based on file extension
-          if (asset.endsWith('.css')) {
-            link.as = 'style';
-            // For CSS files, also add a stylesheet link to ensure they are used
-            const styleLink = document.createElement('link');
-            styleLink.rel = 'stylesheet';
-            styleLink.href = asset;
-            document.head.appendChild(styleLink);
-          } else if (asset.endsWith('.png') || asset.endsWith('.jpg') || asset.endsWith('.svg')) {
-            link.as = 'image';
-          } else if (asset.endsWith('.js')) {
-            link.as = 'script';
-          }
-          
-          document.head.appendChild(link);
+        // Only preload images that aren't already in the DOM or cache
+        imageAssets.forEach(asset => {
+          const img = new Image();
+          img.src = asset;
+          img.style.display = 'none'; // Make sure it's not visible
+          img.onload = () => {
+            // Image loaded successfully (now in cache)
+            document.body.removeChild(img);
+          };
+          document.body.appendChild(img);
         });
       } catch (e) {
-        console.warn('Asset preloading failed:', e);
+        console.warn('Asset loading failed:', e);
       }
     };
     
-    // Call preload immediately
-    preloadAssets();
-    
-    // Also call preload when window loads to ensure assets are actually used
-    window.addEventListener('load', () => {
-      setTimeout(preloadAssets, 100);
-    });
-    
-    return () => {
-      window.removeEventListener('load', preloadAssets);
-    };
+    // Call asset loader after DOM is fully ready
+    if (document.readyState === 'complete') {
+      loadAssets();
+    } else {
+      window.addEventListener('load', loadAssets);
+      return () => window.removeEventListener('load', loadAssets);
+    }
   }, []);
 
+  // Improved wallet initialization with better error handling
   useEffect(() => {
-    // Initialize wallet with better retry logic
-    const initializeWallet = () => {
+    // Only try to initialize if we haven't hit max attempts
+    if (connectionAttempts >= 3) {
+      console.warn('Max connection attempts reached, proceeding anyway');
+      setIsLoading(false);
+      return;
+    }
+    
+    const initializeWallet = async () => {
       setIsLoading(true);
       
-      // Attempt initialization with increasing timeouts to handle slow connections
-      const timer = setTimeout(() => {
-        if (connectionAttempts < 3) {
+      try {
+        // Simulate wallet initialization
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Successfully initialized
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Wallet initialization error:', error);
+        
+        // Increment attempt counter and retry if under max attempts
+        if (connectionAttempts < 2) {
           setConnectionAttempts(prev => prev + 1);
-          setIsLoading(false);
+          // Give some delay before retrying
+          setTimeout(() => {
+            setIsLoading(false);
+          }, 1000);
         } else {
+          // Max retries reached, proceed anyway
           console.warn('Multiple connection attempts needed, but proceeding anyway');
           setIsLoading(false);
         }
-      }, 1000 + connectionAttempts * 500); // Incremental timeout
-      
-      return () => clearTimeout(timer);
+      }
     };
     
     initializeWallet();
     
     // Track wallet connection status
     const handleOnline = () => {
-      // When the browser comes back online, try to reconnect the wallet
-      if (!isLoading && connectionAttempts > 0) {
-        setConnectionAttempts(0);
-        setIsLoading(true);
-        setTimeout(() => setIsLoading(false), 1500);
-      }
+      // When the browser comes back online, reset connection attempts
+      setConnectionAttempts(0);
     };
     
     window.addEventListener('online', handleOnline);
@@ -206,7 +271,9 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
     }>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
-          {isLoading ? <LoadingState /> : children}
+          <NotificationProvider>
+            {isLoading ? <LoadingState /> : children}
+          </NotificationProvider>
         </QueryClientProvider>
       </WagmiProvider>
     </ErrorBoundary>

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useBalance, useWriteContract } from "wagmi";
-import { Address } from "viem";
 import { motion } from "framer-motion";
+import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { Address } from "viem";
+import DCATickStrategy from "./DCATickStrategy";
 
 // Chart component for visualizing investment history
 const InvestmentChart = ({ data }: { data: { date: string; amount: number }[] }) => {
@@ -169,13 +170,15 @@ const CreateDCAModal = ({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { title: string; token: string; amount: string; frequency: string }) => void;
+  onSave: (data: { title: string; token: string; amount: string; frequency: string; tickStrategy?: any }) => void;
   availableTokens: { symbol: string; name: string; address: string }[];
 }) => {
   const [title, setTitle] = useState("");
   const [selectedToken, setSelectedToken] = useState(availableTokens[0]?.symbol || "");
   const [amount, setAmount] = useState("");
   const [frequency, setFrequency] = useState("daily");
+  const [showTickStrategy, setShowTickStrategy] = useState(false);
+  const [tickStrategy, setTickStrategy] = useState<any>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,15 +186,39 @@ const CreateDCAModal = ({
       title, 
       token: selectedToken, 
       amount, 
-      frequency 
+      frequency,
+      tickStrategy
     });
     setTitle("");
     setSelectedToken(availableTokens[0]?.symbol || "");
     setAmount("");
     setFrequency("daily");
+    setTickStrategy(null);
+  };
+
+  const handleTickStrategySave = (strategyData: any) => {
+    setTickStrategy(strategyData);
+    setShowTickStrategy(false);
+  };
+
+  const handleTickStrategyCancel = () => {
+    setShowTickStrategy(false);
   };
 
   if (!isOpen) return null;
+
+  if (showTickStrategy) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="w-full max-w-2xl">
+          <DCATickStrategy 
+            onSave={handleTickStrategySave} 
+            onCancel={handleTickStrategyCancel}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -213,72 +240,99 @@ const CreateDCAModal = ({
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-400 mb-1">Strategy Name</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Strategy Name</label>
               <input
                 type="text"
-                id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. ETH Weekly DCA"
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white"
+                placeholder="My DCA Strategy"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-white"
                 required
               />
             </div>
             
             <div>
-              <label htmlFor="token" className="block text-sm font-medium text-gray-400 mb-1">Target Token</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Target Token</label>
               <select
-                id="token"
                 value={selectedToken}
                 onChange={(e) => setSelectedToken(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-white"
+                required
               >
                 {availableTokens.map((token) => (
-                  <option key={token.address} value={token.symbol}>{token.name} ({token.symbol})</option>
+                  <option key={token.address} value={token.symbol}>
+                    {token.name} ({token.symbol})
+                  </option>
                 ))}
               </select>
             </div>
             
             <div>
-              <label htmlFor="amount" className="block text-sm font-medium text-gray-400 mb-1">Amount (ETH)</label>
-              <input
-                type="text"
-                id="amount"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.1"
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white"
-                pattern="^[0-9]*[.,]?[0-9]*$"
-                required
-              />
+              <label className="block text-sm font-medium text-gray-400 mb-2">Amount (per period)</label>
+              <div className="flex">
+                <input
+                  type="text"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-l-lg p-2.5 text-white"
+                  required
+                />
+                <span className="bg-gray-700 text-white px-3 rounded-r-lg flex items-center">
+                  ETH
+                </span>
+              </div>
             </div>
             
             <div>
-              <label htmlFor="frequency" className="block text-sm font-medium text-gray-400 mb-1">Frequency</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Frequency</label>
               <select
-                id="frequency"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-white"
+                required
               >
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
               </select>
             </div>
+            
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowTickStrategy(true)}
+                className="text-blue-500 hover:text-blue-400 text-sm flex items-center"
+              >
+                <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 6V12M12 12V18M12 12H18M12 12H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                Configure Advanced Tick Strategy
+              </button>
+              
+              {tickStrategy && (
+                <div className="mt-2 p-2 bg-blue-900/20 border border-blue-800/30 rounded-lg">
+                  <div className="text-xs text-blue-400">Advanced tick strategy configured</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    Tick Delta: {tickStrategy.tickDelta}, 
+                    Max Wait: {Math.round(tickStrategy.tickExpiryTime / 3600)}h
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           
-          <div className="flex justify-end mt-6 space-x-3">
+          <div className="mt-6 flex justify-end space-x-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg"
             >
               Create Strategy
             </button>
@@ -330,7 +384,7 @@ export default function DCAComponent() {
   const { /* writeContract, */ data: createData } = useWriteContract();
   
   // Wait for the transaction to complete
-  const { isLoading: isCreateLoading, isSuccess: isCreateSuccess } = useWaitForTransaction({
+  const { isLoading: isCreateLoading, isSuccess: isCreateSuccess } = useWaitForTransactionReceipt({
     hash: createData,
   });
 

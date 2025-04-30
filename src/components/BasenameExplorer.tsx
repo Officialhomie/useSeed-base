@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Avatar, Name } from '@coinbase/onchainkit/identity';
 import { useAvatar, useName } from '@coinbase/onchainkit/identity';
 import { getAvatar, getName } from '@coinbase/onchainkit/identity';
-import { _base, baseSepolia } from 'wagmi/chains';
+import { base, baseSepolia } from 'wagmi/chains';
 
 // Example addresses with Basenames
 const FEATURED_ADDRESSES = [
