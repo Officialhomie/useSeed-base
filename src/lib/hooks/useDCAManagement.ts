@@ -408,8 +408,9 @@ export default function useDCAManagement(): UseDCAManagementResult {
 
   // Helper function to wait for transaction
   const waitForTransaction = async (hash: `0x${string}`) => {
-    const { waitForTransactionReceipt } = await import('wagmi/actions');
-    await waitForTransactionReceipt(hash);
+    await useWaitForTransactionReceipt({
+      hash
+    });
   };
 
   return {

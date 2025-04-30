@@ -31,27 +31,39 @@ interface SwapWithSavingsResult {
   savedAmount: string;
   actualSwapAmount: string;
   estimatedOutput: string;
-  executeSwap: () => void;
+  executeSwap: () => Promise<void>;
   isLoading: boolean;
   isSuccess: boolean;
   isPreparing: boolean;
 }
 
-export default function useSwapWithSavings({
-  inputToken,
-  outputToken,
-  amount,
-  slippage,
-  strategy,
-  overridePercentage,
-  disableSavings
-}: UseSwapWithSavingsProps): SwapWithSavingsResult {
+export default function useSwapWithSavings(
+  props: UseSwapWithSavingsProps | null
+): SwapWithSavingsResult {
   const { address } = useAccount();
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'preparing' | 'pending' | 'success' | 'error'>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [savedAmount, setSavedAmount] = useState('0');
   const [estimatedOutput, setEstimatedOutput] = useState('0');
   const [transactionHash, setTransactionHash] = useState<`0x${string}` | null>(null);
+
+  // If props is null, return default values
+  if (!props) {
+    return {
+      executionStatus: 'idle',
+      error: null,
+      transactionHash: null,
+      savedAmount: '0',
+      actualSwapAmount: '0',
+      estimatedOutput: '0',
+      executeSwap: async () => {},
+      isLoading: false,
+      isSuccess: false,
+      isPreparing: false
+    };
+  }
+
+  const { inputToken, outputToken, amount, slippage, strategy, overridePercentage, disableSavings } = props;
 
   // Calculate the savings amount
   const calculatedSavingsAmount = calculateSavingsAmount(
@@ -88,7 +100,7 @@ export default function useSwapWithSavings({
       inputToken.address,
       outputToken.address,
       parseUnits(actualSwapAmount, inputToken.decimals)
-    ] : undefined,
+    ] : undefined
   });
 
   // Update estimated output when quote changes
@@ -114,7 +126,7 @@ export default function useSwapWithSavings({
   // Execute the swap
   const executeSwap = async () => {
     if (!address || !amount || parseFloat(amount) <= 0) {
-      return;
+      throw new Error('Invalid swap parameters');
     }
 
     try {
@@ -174,8 +186,24 @@ export default function useSwapWithSavings({
 
     } catch (err) {
       setExecutionStatus('error');
-      setError(err instanceof Error ? err : new Error('Unknown error occurred'));
-      console.error('Swap error:', err);
+      const error = err instanceof Error ? err : new Error('Unknown error occurred');
+      
+      // Extract specific error messages from contract errors
+      if (error.message.includes('InsufficientSavings')) {
+        setError(new Error('Insufficient savings balance'));
+      } else if (error.message.includes('SlippageToleranceExceeded')) {
+        setError(new Error('Price movement exceeded slippage tolerance'));
+      } else if (error.message.includes('ZeroAmountSwap')) {
+        setError(new Error('Cannot swap zero amount'));
+      } else if (error.message.includes('SwapExecutionFailed')) {
+        setError(new Error('Swap execution failed - try increasing slippage tolerance'));
+      } else if (error.message.includes('user rejected transaction')) {
+        setError(new Error('Transaction rejected by user'));
+      } else {
+        setError(error);
+      }
+      
+      console.error('Swap error:', error);
     }
   };
 

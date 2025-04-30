@@ -2,59 +2,26 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { Address, parseUnits } from 'viem';
+import { Address } from 'viem';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import useSwapWithSavings from '@/lib/hooks/useSwapWithSavings';
 import useDCAManagement from '@/lib/hooks/useDCAManagement';
+import useSpendSaveStrategy from '@/lib/hooks/useSpendSaveStrategy';
+import { useTokenList, Token } from '@/lib/hooks/useTokenList';
 import { FiSettings, FiArrowDown, FiInfo } from 'react-icons/fi';
 import SwapConfirmationModal from './SwapConfirmationModal';
 import SpendSaveEventListeners from './SpendSaveEventListeners';
 import { useNotification } from './NotificationManager';
-import { CONTRACT_ADDRESSES } from '@/lib/contracts';
-
-interface Token {
-  symbol: string;
-  name: string;
-  address: Address;
-  decimals: number;
-  balance: string;
-  price: number;
-}
-
-const TOKENS: Token[] = [
-  { 
-    symbol: "ETH", 
-    name: "Ethereum", 
-    address: CONTRACT_ADDRESSES.ETH, 
-    decimals: 18, 
-    balance: "0.45", 
-    price: 1850 
-  },
-  { 
-    symbol: "USDC", 
-    name: "USD Coin", 
-    address: CONTRACT_ADDRESSES.USDC, 
-    decimals: 6, 
-    balance: "1,240.50", 
-    price: 1 
-  },
-  { 
-    symbol: "WETH", 
-    name: "Wrapped Ethereum", 
-    address: CONTRACT_ADDRESSES.WETH, 
-    decimals: 18, 
-    balance: "0.35", 
-    price: 1850 
-  },
-];
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
   const { addNotification } = useNotification();
+  const { tokens, isLoading: isLoadingTokens } = useTokenList();
+  const { strategy, isLoading: isLoadingStrategy } = useSpendSaveStrategy();
   
   // Token state
-  const [fromToken, setFromToken] = useState<Token>(TOKENS[0]);
-  const [toToken, setToToken] = useState<Token>(TOKENS[1]);
+  const [fromToken, setFromToken] = useState<Token | null>(null);
+  const [toToken, setToToken] = useState<Token | null>(null);
   const [fromAmount, setFromAmount] = useState("");
   const [toAmount, setToAmount] = useState("");
   
@@ -67,19 +34,6 @@ export default function SwapWithSavings() {
   const [disableSavingsForThisSwap, setDisableSavingsForThisSwap] = useState(false);
   const [overridePercentage, setOverridePercentage] = useState<number | null>(null);
   
-  // Mock strategy for demonstration
-  const [strategy, setStrategy] = useState<SpendSaveStrategy>({
-    currentPercentage: 1000, // 10%
-    autoIncrement: 0,
-    maxPercentage: 2500, // 25%
-    goalAmount: BigInt(0),
-    roundUpSavings: true,
-    enableDCA: true,
-    savingsTokenType: 0, // INPUT
-    specificSavingsToken: TOKENS[0].address,
-    isConfigured: true
-  });
-  
   // DCA management
   const { 
     dcaEnabled, 
@@ -88,17 +42,14 @@ export default function SwapWithSavings() {
     disableDCA,
     executeQueuedDCAs
   } = useDCAManagement();
-  
-  // Get the token by symbol
-  const getTokenBySymbol = (symbol: string): Token => {
-    return TOKENS.find(t => t.symbol === symbol) || TOKENS[0];
-  };
-  
-  // Get the token symbol from address
-  const getTokenSymbol = (address: Address): string => {
-    const token = TOKENS.find(t => t.address === address);
-    return token ? token.symbol : "Unknown";
-  };
+
+  // Set initial tokens once loaded
+  useEffect(() => {
+    if (tokens.length > 0 && !fromToken && !toToken) {
+      setFromToken(tokens[0]);
+      setToToken(tokens[1]);
+    }
+  }, [tokens, fromToken, toToken]);
   
   // Use the swap with savings hook
   const { 
@@ -107,18 +58,20 @@ export default function SwapWithSavings() {
     actualSwapAmount,
     estimatedOutput,
     executeSwap,
-    isLoading,
+    isLoading: isSwapping,
     isSuccess,
     transactionHash
-  } = useSwapWithSavings({
-    inputToken: fromToken,
-    outputToken: toToken,
-    amount: fromAmount,
-    slippage: parseFloat(slippage),
-    strategy,
-    overridePercentage,
-    disableSavings: disableSavingsForThisSwap
-  });
+  } = useSwapWithSavings(
+    fromToken && toToken ? {
+      inputToken: fromToken,
+      outputToken: toToken,
+      amount: fromAmount,
+      slippage: parseFloat(slippage),
+      strategy,
+      overridePercentage,
+      disableSavings: disableSavingsForThisSwap
+    } : null
+  );
   
   // Update estimated output amount when it changes
   useEffect(() => {
@@ -142,14 +95,14 @@ export default function SwapWithSavings() {
   };
   
   // Handle token selection change
-  const handleFromTokenChange = (symbol: string) => {
-    const newToken = getTokenBySymbol(symbol);
-    setFromToken(newToken);
+  const handleFromTokenChange = (address: string) => {
+    const newToken = tokens.find(t => t.address === address);
+    if (newToken) setFromToken(newToken);
   };
   
-  const handleToTokenChange = (symbol: string) => {
-    const newToken = getTokenBySymbol(symbol);
-    setToToken(newToken);
+  const handleToTokenChange = (address: string) => {
+    const newToken = tokens.find(t => t.address === address);
+    if (newToken) setToToken(newToken);
   };
   
   // Handle slippage change
@@ -171,14 +124,39 @@ export default function SwapWithSavings() {
   
   // Event handlers
   const handleSavingsProcessed = (token: Address, amount: bigint) => {
-    // Could update UI or state here
-    console.log(`Savings processed: ${amount} of token ${getTokenSymbol(token)}`);
+    const tokenInfo = tokens.find(t => t.address === token);
+    if (tokenInfo) {
+      addNotification({
+        type: 'success',
+        title: 'Savings Processed',
+        message: `Saved ${amount} ${tokenInfo.symbol}`
+      });
+    }
   };
   
   const handleDCAQueued = (fromToken: Address, toToken: Address, amount: bigint) => {
-    // Could update UI or show additional info here
-    console.log(`DCA queued: ${amount} from ${getTokenSymbol(fromToken)} to ${getTokenSymbol(toToken)}`);
+    const fromTokenInfo = tokens.find(t => t.address === fromToken);
+    const toTokenInfo = tokens.find(t => t.address === toToken);
+    if (fromTokenInfo && toTokenInfo) {
+      addNotification({
+        type: 'success',
+        title: 'DCA Queued',
+        message: `Queued ${amount} ${fromTokenInfo.symbol} for conversion to ${toTokenInfo.symbol}`
+      });
+    }
   };
+
+  if (isLoadingTokens || isLoadingStrategy) {
+    return (
+      <div className="w-full max-w-md mx-auto p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-700 rounded mb-6"></div>
+          <div className="h-40 bg-gray-800 rounded mb-4"></div>
+          <div className="h-40 bg-gray-800 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -273,9 +251,11 @@ export default function SwapWithSavings() {
         <div className="mb-2 bg-gray-800/40 rounded-xl p-4">
           <div className="flex justify-between mb-2">
             <label className="text-sm text-gray-400">From</label>
-            <span className="text-xs text-gray-400">
-              Balance: {fromToken.balance} {fromToken.symbol}
-            </span>
+            {fromToken && (
+              <span className="text-xs text-gray-400">
+                Balance: {fromToken.balance} {fromToken.symbol}
+              </span>
+            )}
           </div>
           <div className="flex justify-between items-center">
             <input
@@ -286,12 +266,12 @@ export default function SwapWithSavings() {
               className="bg-transparent text-xl font-semibold focus:outline-none w-3/5"
             />
             <select
-              value={fromToken.symbol}
+              value={fromToken?.address}
               onChange={(e) => handleFromTokenChange(e.target.value)}
               className="bg-gray-700 text-white px-3 py-2 rounded-lg font-medium"
             >
-              {TOKENS.map(token => (
-                <option key={token.symbol} value={token.symbol}>
+              {tokens.map(token => (
+                <option key={token.address} value={token.address}>
                   {token.symbol}
                 </option>
               ))}
@@ -316,9 +296,11 @@ export default function SwapWithSavings() {
         <div className="mb-4 bg-gray-800/40 rounded-xl p-4">
           <div className="flex justify-between mb-2">
             <label className="text-sm text-gray-400">To</label>
-            <span className="text-xs text-gray-400">
-              Balance: {toToken.balance} {toToken.symbol}
-            </span>
+            {toToken && (
+              <span className="text-xs text-gray-400">
+                Balance: {toToken.balance} {toToken.symbol}
+              </span>
+            )}
           </div>
           <div className="flex justify-between items-center">
             <input
@@ -329,12 +311,12 @@ export default function SwapWithSavings() {
               className="bg-transparent text-xl font-semibold focus:outline-none w-3/5"
             />
             <select
-              value={toToken.symbol}
+              value={toToken?.address}
               onChange={(e) => handleToTokenChange(e.target.value)}
               className="bg-gray-700 text-white px-3 py-2 rounded-lg font-medium"
             >
-              {TOKENS.map(token => (
-                <option key={token.symbol} value={token.symbol}>
+              {tokens.map(token => (
+                <option key={token.address} value={token.address}>
                   {token.symbol}
                 </option>
               ))}
@@ -348,7 +330,7 @@ export default function SwapWithSavings() {
             <div className="flex justify-between items-center mb-1">
               <span className="text-sm text-gray-300">Savings:</span>
               <span className="text-sm font-medium text-blue-400">
-                {savedAmount} {fromToken.symbol}
+                {savedAmount} {fromToken?.symbol}
               </span>
             </div>
             
@@ -356,7 +338,7 @@ export default function SwapWithSavings() {
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm text-gray-300">Actual swap amount:</span>
                 <span className="text-sm font-medium text-white">
-                  {actualSwapAmount} {fromToken.symbol}
+                  {actualSwapAmount} {fromToken?.symbol}
                 </span>
               </div>
             )}
@@ -364,7 +346,9 @@ export default function SwapWithSavings() {
             {strategy.enableDCA && dcaEnabled && dcaTargetToken && (
               <div className="flex items-center mt-2 text-xs text-purple-300">
                 <FiInfo className="mr-1" />
-                <span>Saved amount will be queued for conversion to {getTokenSymbol(dcaTargetToken)}</span>
+                <span>Saved amount will be queued for conversion to {
+                  tokens.find(t => t.address === dcaTargetToken)?.symbol
+                }</span>
               </div>
             )}
           </div>
@@ -372,17 +356,17 @@ export default function SwapWithSavings() {
         
         {/* Swap Button */}
         <button
-          disabled={!fromAmount || !isConnected || isLoading || parseFloat(fromAmount) <= 0}
+          disabled={!fromToken || !toToken || !fromAmount || !isConnected || isSwapping || parseFloat(fromAmount) <= 0}
           onClick={handleSwapClick}
           className={`w-full py-3 rounded-xl font-bold ${
-            fromAmount && isConnected && !isLoading && parseFloat(fromAmount) > 0
+            fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0
               ? "bg-blue-600 hover:bg-blue-500 text-white"
               : "bg-gray-700 text-gray-400 cursor-not-allowed"
           } transition-colors flex items-center justify-center`}
         >
           {!isConnected 
             ? "Connect Wallet" 
-            : isLoading 
+            : isSwapping 
               ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -423,23 +407,24 @@ export default function SwapWithSavings() {
       </div>
       
       {/* Confirmation Modal */}
-      <SwapConfirmationModal
-        isOpen={showConfirmation}
-        onClose={() => setShowConfirmation(false)}
-        onConfirm={handleConfirmSwap}
-        fromToken={fromToken.symbol}
-        toToken={toToken.symbol}
-        fromAmount={fromAmount}
-        toAmount={toAmount}
-        strategy={strategy}
-        overridePercentage={overridePercentage}
-        disableSavings={disableSavingsForThisSwap}
-        slippage={slippage}
-        gasEstimate="~0.002 ETH"
-        usingUniswapV4={true}
-        dcaEnabled={dcaEnabled}
-        dcaTargetToken={dcaTargetToken ? getTokenSymbol(dcaTargetToken) : undefined}
-      />
+      {fromToken && toToken && (
+        <SwapConfirmationModal
+          isOpen={showConfirmation}
+          onClose={() => setShowConfirmation(false)}
+          onConfirm={handleConfirmSwap}
+          fromToken={fromToken.symbol}
+          toToken={toToken.symbol}
+          fromAmount={fromAmount}
+          toAmount={toAmount}
+          strategy={strategy}
+          overridePercentage={overridePercentage}
+          disableSavings={disableSavingsForThisSwap}
+          slippage={slippage}
+          usingUniswapV4={true}
+          dcaEnabled={dcaEnabled}
+          dcaTargetToken={dcaTargetToken ? tokens.find(t => t.address === dcaTargetToken)?.symbol : undefined}
+        />
+      )}
       
       {/* Event Listeners */}
       <SpendSaveEventListeners

@@ -4,7 +4,8 @@ import { useAccount } from 'wagmi';
 import { FiAlertCircle, FiArrowDown, FiExternalLink } from 'react-icons/fi';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import { calculateSavingsAmount, calculateActualSwapAmount } from '@/lib/utils/savingsCalculator';
-import { getSavingsTokenTypeName, getTokenSymbolFromAddress } from '@/lib/utils/savingsHelpers';
+import { getSavingsTokenTypeName } from '@/lib/utils/savingsHelpers';
+import useGasEstimation from '@/lib/hooks/useGasEstimation';
 
 interface SwapConfirmationModalProps {
   isOpen: boolean;
@@ -18,8 +19,6 @@ interface SwapConfirmationModalProps {
   overridePercentage: number | null;
   disableSavings: boolean;
   slippage: string;
-  priceImpact?: string;
-  gasEstimate?: string;
   usingUniswapV4?: boolean;
   dcaEnabled?: boolean;
   dcaTargetToken?: string;
@@ -37,8 +36,6 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
   overridePercentage,
   disableSavings,
   slippage,
-  priceImpact = "0.01",
-  gasEstimate = "0.0012 ETH",
   usingUniswapV4 = true,
   dcaEnabled = false,
   dcaTargetToken
@@ -62,64 +59,95 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
     disableSavings
   );
 
-  const handleConfirm = () => {
+  // Get gas estimation
+  const { gasInEth, isLoading: isLoadingGas } = useGasEstimation(
+    'swap',
+    strategy,
+    overridePercentage,
+    disableSavings
+  );
+
+  // Calculate price impact
+  const priceImpact = ((parseFloat(fromAmount) - parseFloat(toAmount)) / parseFloat(fromAmount) * 100).toFixed(2);
+
+  const handleConfirm = async () => {
     setIsLoading(true);
-    // In a real implementation, you would wait for the transaction to be mined
-    setTimeout(() => {
-      onConfirm();
+    try {
+      await onConfirm();
+    } catch (error) {
+      console.error('Swap confirmation error:', error);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-md mx-4"
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-white text-lg font-semibold">Confirm Swap</h2>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        </div>
-
-        <div className="bg-gray-800 rounded-xl p-4 mb-4">
-          <div className="flex justify-between mb-2">
-            <span className="text-gray-400">From</span>
-            <span className="text-white font-medium">{fromAmount} {fromToken}</span>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+    >
+      <div className="w-full max-w-md bg-gray-900 rounded-2xl shadow-xl p-6 m-4">
+        <h2 className="text-xl font-bold text-white mb-4">Confirm Swap</h2>
+        
+        {/* Swap Details */}
+        <div className="bg-gray-800/40 rounded-xl p-4 mb-4">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <p className="text-sm text-gray-400">From</p>
+              <p className="text-lg font-medium text-white">{fromAmount} {fromToken}</p>
+            </div>
           </div>
           
           <div className="flex justify-center my-2">
-            <div className="bg-gray-700 rounded-full p-1">
-              <FiArrowDown className="text-white" />
+            <div className="bg-gray-700 rounded-full p-2">
+              <FiArrowDown className="text-gray-400" />
             </div>
           </div>
           
-          <div className="flex justify-between">
-            <span className="text-gray-400">To</span>
-            <span className="text-white font-medium">{toAmount} {toToken}</span>
-          </div>
-
-          {/* Price impact warning */}
-          {parseFloat(priceImpact) > 5 && (
-            <div className="mt-3 flex items-center text-yellow-500 text-sm">
-              <FiAlertCircle className="mr-1" />
-              <span>High price impact: {priceImpact}%</span>
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-sm text-gray-400">To</p>
+              <p className="text-lg font-medium text-white">{toAmount} {toToken}</p>
             </div>
-          )}
+          </div>
         </div>
-
-        {/* Savings information */}
+        
+        {/* Transaction Details */}
+        <div className="space-y-3 mb-6">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Rate</span>
+            <span className="text-white">1 {fromToken} = {(parseFloat(toAmount) / parseFloat(fromAmount)).toFixed(6)} {toToken}</span>
+          </div>
+          
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Price Impact</span>
+            <span className={`${
+              parseFloat(priceImpact) > 5 ? 'text-red-400' : 
+              parseFloat(priceImpact) > 3 ? 'text-yellow-400' : 
+              'text-green-400'
+            }`}>
+              {priceImpact}%
+            </span>
+          </div>
+          
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Slippage Tolerance</span>
+            <span className="text-white">{slippage}%</span>
+          </div>
+          
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Network Fee</span>
+            <span className="text-white">
+              {isLoadingGas ? 'Calculating...' : `~${gasInEth} ETH`}
+            </span>
+          </div>
+        </div>
+        
+        {/* Savings Information */}
         {strategy.isConfigured && !disableSavings && (
           <div className="mt-4 border-t border-gray-800 pt-4">
             <h3 className="text-white font-medium mb-2">Savings Information</h3>
@@ -150,58 +178,35 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
             )}
           </div>
         )}
-
-        {/* Uniswap v4 information */}
-        {usingUniswapV4 && (
-          <div className="mt-4 border-t border-gray-800 pt-4">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400 text-sm">Routing via</span>
-              <div className="flex items-center">
-                <img src="/uniswap-v4-logo.png" alt="Uniswap v4" className="h-4 w-4 mr-1" />
-                <span className="text-white text-sm">Uniswap v4</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-gray-400 text-sm">Hook</span>
-              <span className="text-white text-sm font-mono text-xs">SpendSaveHook</span>
+        
+        {/* Warning for high price impact */}
+        {parseFloat(priceImpact) > 5 && (
+          <div className="flex items-start space-x-2 bg-red-900/20 border border-red-800/30 rounded-lg p-3 mb-4">
+            <FiAlertCircle className="text-red-400 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-400">
+                This trade has a high price impact. You will lose a significant amount due to slippage.
+              </p>
             </div>
           </div>
         )}
-
-        {/* Transaction Details */}
-        <div className="mb-6">
-          <div className="flex justify-between mb-2">
-            <span className="text-gray-400">Price</span>
-            <span className="text-white">1 {fromToken} = {(parseFloat(toAmount) / parseFloat(fromAmount)).toFixed(6)} {toToken}</span>
-          </div>
-          
-          <div className="flex justify-between">
-            <span className="text-gray-400">Slippage Tolerance</span>
-            <span className="text-white">{slippage}%</span>
-          </div>
-        </div>
-
-        <div className="mt-4 border-t border-gray-800 pt-4">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-400 text-sm">Gas estimate</span>
-            <span className="text-white">{gasEstimate}</span>
-          </div>
-        </div>
-
-        <div className="flex space-x-3 mt-6">
+        
+        {/* Action Buttons */}
+        <div className="flex space-x-4">
           <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-xl font-bold bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+            className="flex-1 py-3 rounded-xl font-bold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
           >
             Cancel
           </button>
-          
           <button
             onClick={handleConfirm}
-            disabled={isLoading}
+            disabled={isLoading || isLoadingGas}
             className={`flex-1 py-3 rounded-xl font-bold ${
-              isLoading ? "bg-gray-700 text-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500 text-white"
-            } transition-colors flex justify-center items-center`}
+              isLoading || isLoadingGas
+                ? "bg-blue-600/50 text-white/50 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-500 text-white"
+            } transition-colors flex items-center justify-center`}
           >
             {isLoading ? (
               <>
@@ -216,8 +221,8 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
             )}
           </button>
         </div>
-      </motion.div>
-    </div>
+      </div>
+    </motion.div>
   );
 };
 
