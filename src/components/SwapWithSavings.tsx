@@ -8,16 +8,19 @@ import useSwapWithSavings from '@/lib/hooks/useSwapWithSavings';
 import useDCAManagement from '@/lib/hooks/useDCAManagement';
 import useSpendSaveStrategy from '@/lib/hooks/useSpendSaveStrategy';
 import { useTokenList, Token } from '@/lib/hooks/useTokenList';
-import { FiSettings, FiArrowDown, FiInfo } from 'react-icons/fi';
+import { useTokenBalances } from '@/lib/hooks/useTokenBalances';
+import { FiSettings, FiArrowDown, FiInfo, FiExternalLink } from 'react-icons/fi';
 import SwapConfirmationModal from './SwapConfirmationModal';
 import SpendSaveEventListeners from './SpendSaveEventListeners';
 import { useNotification } from './NotificationManager';
+import TokenSelector from './TokenSelector';
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
   const { addNotification } = useNotification();
   const { tokens, isLoading: isLoadingTokens } = useTokenList();
   const { strategy, isLoading: isLoadingStrategy } = useSpendSaveStrategy();
+  const { tokenBalances, isLoading: isLoadingBalances } = useTokenBalances();
   
   // Token state
   const [fromToken, setFromToken] = useState<Token | null>(null);
@@ -43,11 +46,20 @@ export default function SwapWithSavings() {
     executeQueuedDCAs
   } = useDCAManagement();
 
+  // Add state for validation error
+  const [validationError, setValidationError] = useState<string | null>(null);
+  
   // Set initial tokens once loaded
   useEffect(() => {
-    if (tokens.length > 0 && !fromToken && !toToken) {
-      setFromToken(tokens[0]);
-      setToToken(tokens[1]);
+    if (tokens && tokens.length > 0 && !fromToken && !toToken) {
+      try {
+        setFromToken(tokens[0]);
+        if (tokens.length > 1) {
+          setToToken(tokens[1]);
+        }
+      } catch (error) {
+        console.error("Error setting initial tokens:", error);
+      }
     }
   }, [tokens, fromToken, toToken]);
   
@@ -63,8 +75,8 @@ export default function SwapWithSavings() {
     transactionHash
   } = useSwapWithSavings(
     fromToken && toToken ? {
-      inputToken: fromToken,
-      outputToken: toToken,
+      fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC' | 'DAI',
+      toToken: toToken.symbol as 'ETH' | 'WETH' | 'USDC' | 'DAI',
       amount: fromAmount,
       slippage: parseFloat(slippage),
       strategy,
@@ -89,20 +101,56 @@ export default function SwapWithSavings() {
     setToAmount("");
   };
   
+  // Calculate gas buffer based on balance
+  const calculateGasBuffer = (ethBalance: number): number => {
+    let gasBuffer = 0.05; // Default 0.05 ETH buffer
+    
+    // For small balances, use percentage-based buffer instead
+    if (ethBalance < 0.1) {
+      gasBuffer = ethBalance * 0.3; // 30% of balance for very small amounts
+    } else if (ethBalance < 0.5) {
+      gasBuffer = 0.03; // 0.03 ETH for moderate amounts
+    }
+    
+    // Ensure we have at least 0.01 ETH for gas
+    return Math.max(gasBuffer, 0.01);
+  };
+  
   // Handle from amount change
   const handleFromAmountChange = (value: string) => {
     setFromAmount(value);
+    
+    // Clear any existing validation errors when input changes
+    if (validationError) {
+      setValidationError(null);
+    }
+    
+    // Perform real-time validation when user inputs amount
+    if (value && fromToken && tokenBalances && tokenBalances[fromToken.symbol]) {
+      const amount = parseFloat(value);
+      const balance = parseFloat(tokenBalances[fromToken.symbol].formattedBalance);
+      
+      // Check if amount exceeds balance
+      if (amount > balance) {
+        setValidationError(`Insufficient ${fromToken.symbol} balance`);
+      }
+      // For ETH, also check if we're leaving enough for gas
+      else if (fromToken.symbol === 'ETH') {
+        const gasBuffer = calculateGasBuffer(balance);
+        if (amount > balance - gasBuffer) {
+          setValidationError(`Leave ~${gasBuffer.toFixed(3)} ETH for gas fees`);
+        }
+      }
+    }
   };
   
   // Handle token selection change
-  const handleFromTokenChange = (address: string) => {
-    const newToken = tokens.find(t => t.address === address);
-    if (newToken) setFromToken(newToken);
+  const handleFromTokenChange = (token: Token) => {
+    setFromToken(token);
   };
   
-  const handleToTokenChange = (address: string) => {
-    const newToken = tokens.find(t => t.address === address);
-    if (newToken) setToToken(newToken);
+  const handleToTokenChange = (token: Token) => {
+    setToToken(token);
   };
   
   // Handle slippage change
@@ -110,16 +158,118 @@ export default function SwapWithSavings() {
     setSlippage(value);
   };
   
+  // Handle max amount button click
+  const handleMaxClick = () => {
+    if (!fromToken) return;
+    
+    if (tokenBalances && tokenBalances[fromToken.symbol]) {
+      // For ETH, leave more for gas - use dynamic calculation
+      if (fromToken.symbol === 'ETH') {
+        const ethBalance = parseFloat(tokenBalances.ETH.formattedBalance);
+        
+        // Different gas buffer based on total balance
+        let gasBuffer = 0.05; // Default 0.05 ETH buffer
+        
+        // For small balances, use percentage-based buffer instead
+        if (ethBalance < 0.1) {
+          gasBuffer = ethBalance * 0.3; // 30% of balance for very small amounts
+        } else if (ethBalance < 0.5) {
+          gasBuffer = 0.03; // 0.03 ETH for moderate amounts
+        }
+        
+        // Ensure we have at least 0.01 ETH for gas
+        gasBuffer = Math.max(gasBuffer, 0.01);
+        
+        // Calculate max amount
+        const maxAmount = Math.max(0, ethBalance - gasBuffer).toFixed(6);
+        setFromAmount(maxAmount);
+        
+        // Show notification about gas reservation
+        if (ethBalance <= gasBuffer) {
+          addNotification({
+            type: 'warning',
+            title: 'Low ETH Balance',
+            message: `Your ETH balance (${ethBalance.toFixed(4)} ETH) is too low to swap. Keep ETH for gas fees.`
+          });
+        }
+      } else {
+        setFromAmount(tokenBalances[fromToken.symbol].formattedBalance);
+      }
+    }
+  };
+  
+  // Validate amount before swap
+  const validateSwapAmount = () => {
+    if (!fromToken || !fromAmount) return false;
+    
+    // Get current balance
+    const currentBalance = tokenBalances && tokenBalances[fromToken.symbol] 
+      ? parseFloat(tokenBalances[fromToken.symbol].formattedBalance)
+      : 0;
+    
+    // Amount user is trying to swap
+    const amount = parseFloat(fromAmount);
+    
+    // For ETH, ensure we're leaving enough for gas
+    if (fromToken.symbol === 'ETH') {
+      const gasBuffer = calculateGasBuffer(currentBalance);
+      // Check if amount + gas buffer exceeds balance
+      return amount <= currentBalance - gasBuffer;
+    }
+    
+    // For other tokens, just check that amount doesn't exceed balance
+    return amount <= currentBalance;
+  };
+  
   // Handle swap button click
   const handleSwapClick = () => {
     if (!isConnected || !fromAmount || parseFloat(fromAmount) <= 0) return;
+    
+    // Add validation check
+    if (fromToken && fromToken.symbol === 'ETH' && !validateSwapAmount()) {
+      addNotification({
+        type: 'error',
+        title: 'Insufficient Balance',
+        message: 'You need to leave some ETH for gas. Try using a smaller amount or the MAX button.'
+      });
+      return;
+    }
+    
     setShowConfirmation(true);
   };
   
   // Handle confirmation
   const handleConfirmSwap = () => {
     setShowConfirmation(false);
-    executeSwap();
+    
+    // Double-check validation before executing swap
+    if (validateSwapAmount()) {
+      executeSwap().catch(error => {
+        console.error("Swap execution error:", error);
+        
+        // Check if it's an "insufficient funds" error
+        if (error.message && error.message.includes("insufficient funds")) {
+          addNotification({
+            type: 'error',
+            title: 'Insufficient Funds',
+            message: 'You don\'t have enough ETH to cover this transaction. Try a smaller amount or the MAX button.'
+          });
+        } else {
+          // Generic error handling
+          addNotification({
+            type: 'error',
+            title: 'Transaction Failed',
+            message: 'The swap transaction failed. Please try again later.'
+          });
+        }
+      });
+    } else {
+      addNotification({
+        type: 'error',
+        title: 'Validation Failed',
+        message: 'Transaction validation failed. Please try a smaller amount.'
+      });
+    }
   };
   
   // Event handlers
@@ -247,37 +397,58 @@ export default function SwapWithSavings() {
           </div>
         )}
         
-        {/* From Token */}
-        <div className="mb-2 bg-gray-800/40 rounded-xl p-4">
+        {/* From Token Input Field - Let's add the balance display and MAX button here */}
+        <div className="bg-gray-800 rounded-xl p-4 mb-2">
           <div className="flex justify-between mb-2">
             <label className="text-sm text-gray-400">From</label>
-            {fromToken && (
-              <span className="text-xs text-gray-400">
-                Balance: {fromToken.balance} {fromToken.symbol}
-              </span>
+            {fromToken && tokenBalances && tokenBalances[fromToken.symbol] && (
+              <div className="text-xs text-gray-400 flex items-center">
+                Balance: {tokenBalances[fromToken.symbol].formattedBalance}
+                <button
+                  onClick={handleMaxClick}
+                  className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
+                  type="button"
+                >
+                  MAX
+                </button>
+              </div>
             )}
           </div>
-          <div className="flex justify-between items-center">
+          <div className="flex items-center">
             <input
               type="text"
               value={fromAmount}
               onChange={(e) => handleFromAmountChange(e.target.value)}
               placeholder="0.0"
-              className="bg-transparent text-xl font-semibold focus:outline-none w-3/5"
+              className="bg-transparent text-white text-xl w-full focus:outline-none font-medium"
+              inputMode="decimal"
             />
-            <select
-              value={fromToken?.address}
-              onChange={(e) => handleFromTokenChange(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg font-medium"
-            >
-              {tokens.map(token => (
-                <option key={token.address} value={token.address}>
-                  {token.symbol}
-                </option>
-              ))}
-            </select>
+            <TokenSelector
+              value={fromToken}
+              onChange={handleFromTokenChange}
+              tokens={tokens}
+              disabled={!isConnected || isLoadingTokens}
+              isLoading={isLoadingTokens}
+            />
           </div>
+          
+          {/* Add gas info for ETH */}
+          {fromToken && fromToken.symbol === 'ETH' && tokenBalances && tokenBalances.ETH && (
+            <div className="mt-2 text-xs flex items-center text-blue-300">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              For ETH transactions, approximately {calculateGasBuffer(parseFloat(tokenBalances.ETH.formattedBalance)).toFixed(3)} ETH is reserved for gas fees
+            </div>
+          )}
         </div>
+        
+        {/* Show validation error if exists */}
+        {validationError && (
+          <div className="mt-2 text-sm text-red-400">
+            {validationError}
+          </div>
+        )}
         
         {/* Swap Button */}
         <div className="relative h-10 flex justify-center my-2">
@@ -292,35 +463,31 @@ export default function SwapWithSavings() {
           </button>
         </div>
         
-        {/* To Token */}
-        <div className="mb-4 bg-gray-800/40 rounded-xl p-4">
+        {/* To Token Input Field */}
+        <div className="bg-gray-800 rounded-xl p-4 mb-4">
           <div className="flex justify-between mb-2">
             <label className="text-sm text-gray-400">To</label>
-            {toToken && (
-              <span className="text-xs text-gray-400">
-                Balance: {toToken.balance} {toToken.symbol}
-              </span>
+            {toToken && tokenBalances && tokenBalances[toToken.symbol] && (
+              <div className="text-xs text-gray-400">
+                Balance: {tokenBalances[toToken.symbol].formattedBalance}
+              </div>
             )}
           </div>
-          <div className="flex justify-between items-center">
+          <div className="flex items-center">
             <input
               type="text"
               value={toAmount}
               readOnly
               placeholder="0.0"
-              className="bg-transparent text-xl font-semibold focus:outline-none w-3/5"
+              className="bg-transparent text-white text-xl w-full focus:outline-none font-medium"
             />
-            <select
-              value={toToken?.address}
-              onChange={(e) => handleToTokenChange(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-2 rounded-lg font-medium"
-            >
-              {tokens.map(token => (
-                <option key={token.address} value={token.address}>
-                  {token.symbol}
-                </option>
-              ))}
-            </select>
+            <TokenSelector
+              value={toToken}
+              onChange={handleToTokenChange}
+              tokens={tokens}
+              disabled={!isConnected || isLoadingTokens}
+              isLoading={isLoadingTokens}
+            />
           </div>
         </div>
         
@@ -356,10 +523,10 @@ export default function SwapWithSavings() {
         
         {/* Swap Button */}
         <button
-          disabled={!fromToken || !toToken || !fromAmount || !isConnected || isSwapping || parseFloat(fromAmount) <= 0}
+          disabled={!fromToken || !toToken || !fromAmount || !isConnected || isSwapping || parseFloat(fromAmount) <= 0 || validationError !== null}
           onClick={handleSwapClick}
           className={`w-full py-3 rounded-xl font-bold ${
-            fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0
+            fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0 && validationError === null
               ? "bg-blue-600 hover:bg-blue-500 text-white"
               : "bg-gray-700 text-gray-400 cursor-not-allowed"
           } transition-colors flex items-center justify-center`}
@@ -378,7 +545,9 @@ export default function SwapWithSavings() {
               ) 
               : !fromAmount || parseFloat(fromAmount) <= 0
                 ? "Enter an amount"
-                : "Swap"
+                : validationError !== null
+                  ? "Insufficient balance"
+                  : "Swap"
           }
         </button>
         

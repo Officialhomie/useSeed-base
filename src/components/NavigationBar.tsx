@@ -73,6 +73,12 @@ export default function NavigationBar() {
                 <div className="nav-indicator"></div>
               </Link>
             </li>
+            <li className={activeSection === 'balances' ? 'active' : ''}>
+              <Link href="/balances" onClick={() => setActiveSection('balances')}>
+                Balances
+                <div className="nav-indicator"></div>
+              </Link>
+            </li>
             <li className={activeSection === 'docs' ? 'active' : ''}>
               <Link href="/docs" onClick={() => setActiveSection('docs')}>
                 Documentation

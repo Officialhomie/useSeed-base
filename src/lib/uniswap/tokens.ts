@@ -1,0 +1,88 @@
+import { Token } from '@uniswap/sdk-core'
+import { CONTRACT_ADDRESSES } from '../contracts'
+
+// Chain ID for Base Sepolia
+export const CHAIN_ID = 84532
+
+// Native ETH token representation
+export const NATIVE_ETH = {
+  name: 'Ethereum',
+  symbol: 'ETH',
+  decimals: 18,
+  isNative: true,
+  address: CONTRACT_ADDRESSES.ETH,
+  chainId: CHAIN_ID,
+}
+
+// Token Instances using Uniswap SDK
+export const WETH = new Token(
+  CHAIN_ID,
+  CONTRACT_ADDRESSES.WETH,
+  18,
+  'WETH',
+  'Wrapped Ether'
+)
+
+export const USDC = new Token(
+  CHAIN_ID,
+  CONTRACT_ADDRESSES.USDC,
+  6,
+  'USDC',
+  'USD Coin'
+)
+
+// DAI token on Base Sepolia
+export const DAI = new Token(
+  CHAIN_ID,
+  '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb', // Base Sepolia DAI address
+  18,
+  'DAI',
+  'Dai Stablecoin'
+)
+
+// All supported tokens
+export const SUPPORTED_TOKENS = {
+  ETH: NATIVE_ETH,
+  WETH,
+  USDC,
+  DAI,
+} as const
+
+// Helper to get token by symbol
+export function getTokenBySymbol(symbol: keyof typeof SUPPORTED_TOKENS) {
+  return SUPPORTED_TOKENS[symbol]
+}
+
+// Helper to get token by address
+export function getTokenByAddress(address: string) {
+  return Object.values(SUPPORTED_TOKENS).find(
+    token => token.address.toLowerCase() === address.toLowerCase()
+  )
+}
+
+// All supported token symbols
+export type SupportedTokenSymbol = keyof typeof SUPPORTED_TOKENS
+
+// Pairs that we support for direct swaps
+export const SUPPORTED_PAIRS = [
+  // ETH pairs
+  ['ETH', 'WETH'],
+  ['ETH', 'USDC'],
+  ['ETH', 'DAI'],
+  // WETH pairs
+  ['WETH', 'USDC'],
+  ['WETH', 'DAI'],
+  // Stablecoin pairs
+  ['USDC', 'DAI'],
+] as const
+
+// Validate if a pair is supported
+export function isPairSupported(
+  tokenA: SupportedTokenSymbol,
+  tokenB: SupportedTokenSymbol
+): boolean {
+  return SUPPORTED_PAIRS.some(
+    ([a, b]) =>
+      (a === tokenA && b === tokenB) || (a === tokenB && b === tokenA)
+  )
+} 

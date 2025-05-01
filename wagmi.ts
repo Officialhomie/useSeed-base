@@ -1,4 +1,4 @@
-import { http, createConfig } from "wagmi";
+import { http, createConfig, fallback } from "wagmi";
 import { base, baseSepolia } from "wagmi/chains";
 import { coinbaseWallet } from "wagmi/connectors";
 
@@ -23,40 +23,61 @@ function setupDebugger() {
 // Call setup function
 setupDebugger();
 
-// Properly configure transports for each chain
+// Configure multiple transports with fallback for Base Sepolia
+const baseSepoliaTransports = [
+  // Support for public gateway endpoints that have CORS enabled
+  http('https://sepolia.base.org', { 
+    timeout: 10000,
+    fetchOptions: {
+      mode: 'cors',
+      cache: 'no-cache',
+    }
+  }),
+  // Alternate node with longer timeout
+  http('https://base-sepolia-rpc.publicnode.com', { 
+    timeout: 15000,
+    fetchOptions: {
+      mode: 'cors',
+      cache: 'no-cache',
+    }
+  }),
+  // Local proxy option if direct access fails
+  http('/api/rpc/base-sepolia', { 
+    timeout: 8000,
+    fetchOptions: {
+      mode: 'same-origin',
+    }
+  })
+];
+
+// Main network transports (for future use)
+const baseMainnetTransports = [
+  http('https://mainnet.base.org', {
+    timeout: 10000,
+    fetchOptions: {
+      mode: 'cors',
+      cache: 'no-cache',
+    }
+  }),
+  http('https://base-mainnet-rpc.publicnode.com', {
+    timeout: 15000,
+    fetchOptions: {
+      mode: 'cors',
+      cache: 'no-cache',
+    }
+  })
+];
+
+// Create the Wagmi config with our transports
 export const config = createConfig({
   chains: [baseSepolia, base],
-  multiInjectedProviderDiscovery: true, // Discover all providers
-  connectors: [cbWalletConnector],
-  ssr: true,
+  connectors: [
+    cbWalletConnector,
+  ],
   transports: {
-    [baseSepolia.id]: http(`https://base-sepolia-rpc.publicnode.com`, {
-      retryCount: 5,
-      retryDelay: 1500, // Fixed retry delay of 1.5 seconds
-      timeout: 15000,
-      fetchOptions: {
-        cache: 'no-store',
-        credentials: 'omit',
-        priority: 'high',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    }),
-    [base.id]: http(`https://base-mainnet-rpc.publicnode.com`, {
-      retryCount: 3,
-      retryDelay: 1000,
-      timeout: 30000,
-      fetchOptions: {
-        cache: 'no-store',
-        credentials: 'omit',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    }),
+    [baseSepolia.id]: fallback(baseSepoliaTransports),
+    [base.id]: fallback(baseMainnetTransports)
   },
-  syncConnectedChain: true,
 });
 
 // Add custom typings for better TypeScript integration

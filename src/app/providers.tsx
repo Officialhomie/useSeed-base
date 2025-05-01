@@ -35,76 +35,74 @@ const ErrorBoundary = ({
 
     window.addEventListener('error', errorHandler);
     
-    // Enhanced fetch error handling with timeout
+    // Enhanced fetch error handling with more robust fallbacks
     const handleFetchErrors = () => {
       const originalFetch = window.fetch;
-      window.fetch = async (...args) => {
+      window.fetch = async (...args: Parameters<typeof originalFetch>) => {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+        const options = args[1] || {};
+        
+        // Skip interception for non-RPC requests
+        if (!url || typeof url !== 'string' || 
+            (!url.includes('alchemy.com') && 
+             !url.includes('base-sepolia') && 
+             !url.includes('base.org'))) {
+          return originalFetch(...args);
+        }
+
         try {
-          // Add timeout to fetch requests
+          // Add proper CORS headers if missing
+          const updatedOptions = { ...options };
+          if (!updatedOptions.mode) {
+            (updatedOptions as RequestInit).mode = 'cors';
+          }
+          
+          // Add cache control for RPC requests
+          if (!updatedOptions.cache) {
+            (updatedOptions as RequestInit).cache = 'no-cache';
+          }
+          
+          // Use a reasonable timeout for RPC requests
           const controller = new AbortController();
+          const { signal } = controller;
           const timeoutId = setTimeout(() => {
             controller.abort();
-            console.warn(`Fetch timeout for ${typeof args[0] === 'string' ? args[0] : 'request'}`);
-          }, 10000); // Reduced timeout to 10 seconds
+          }, 10000);
           
-          const fetchOptions = args[1] || {};
-          const newOptions = {
-            ...fetchOptions,
-            signal: controller.signal,
-          };
-          
-          const response = await originalFetch(args[0], newOptions);
-          clearTimeout(timeoutId);
-          
-          if (!response.ok) {
-            // Handle specific error statuses
-            if (response.status >= 500) {
-              console.warn(`Server error (${response.status}) for ${typeof args[0] === 'string' ? args[0] : 'request'}`);
-              
-              // If request is to Base Sepolia and it fails, try to use the fallback
-              if (typeof args[0] === 'string' && args[0].includes('sepolia.base.org')) {
-                console.info('Attempting to use fallback RPC...');
-                const fallbackUrl = args[0].replace('sepolia.base.org', 'base-sepolia-rpc.publicnode.com');
-                const fallbackResponse = await originalFetch(fallbackUrl, newOptions);
-                return fallbackResponse;
+          try {
+            const response = await originalFetch(url, {
+              ...updatedOptions,
+              signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // Handle server errors
+            if (!response.ok) {
+              console.warn(`Server error (${response.status}) for ${url}`);
+              throw new Error(`HTTP error ${response.status}`);
+            }
+            
+            return response;
+          } catch (error: any) {
+            clearTimeout(timeoutId);
+            
+            // Log but don't repeatedly report the same errors
+            console.error('Fetch operation failed:', error);
+            
+            // For development debugging only
+            if (process.env.NODE_ENV === 'development') {
+              // If CORS error, suggest solutions
+              if (error.message && error.message.includes('CORS')) {
+                console.info('CORS error detected. Consider using a proxy or a CORS-enabled endpoint');
               }
             }
+            
+            throw error;
           }
-          return response;
-        } catch (error) {
-          console.error('Fetch operation failed:', error);
-          
-          // If request is to Base Sepolia and it fails, try to use the fallback
-          if (typeof args[0] === 'string' && args[0].includes('sepolia.base.org')) {
-            try {
-              console.info('Error caught, attempting to use fallback RPC...');
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 10000);
-              
-              const fetchOptions = args[1] || {};
-              const newOptions = {
-                ...fetchOptions,
-                signal: controller.signal,
-              };
-              
-              const fallbackUrl = args[0].replace('sepolia.base.org', 'base-sepolia-rpc.publicnode.com');
-              const fallbackResponse = await originalFetch(fallbackUrl, newOptions);
-              clearTimeout(timeoutId);
-              return fallbackResponse;
-            } catch (fallbackError) {
-              console.error('Fallback RPC also failed:', fallbackError);
-            }
-          }
-          
-          // Create a more detailed error response
-          return new Response(JSON.stringify({ 
-            error: 'Network request failed', 
-            details: error instanceof Error ? error.message : 'Unknown error',
-            timestamp: new Date().toISOString()
-          }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-          });
+        } catch (error: any) {
+          // Fall through to original fetch as last resort
+          return originalFetch(...args);
         }
       };
     };

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useReadContract } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import { Address, formatUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import TokenABI from '@/ABI/Token.json';
+import { SUPPORTED_TOKENS, SupportedTokenSymbol } from '../uniswap/tokens';
 
 export interface Token {
-  symbol: string;
+  symbol: SupportedTokenSymbol;
   name: string;
   address: Address;
   decimals: number;
@@ -15,77 +16,122 @@ export interface Token {
 
 export function useTokenList() {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
   const [tokens, setTokens] = useState<Token[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Get token balances
-  const fetchTokenData = async (tokenAddress: Address) => {
-    const { data: tokenData } = await useReadContract({
-      address: tokenAddress,
-      abi: TokenABI,
-      functionName: 'name',
-    }) as { data: string };
+  const fetchTokenData = async (tokenAddress: Address, symbol: SupportedTokenSymbol) => {
+    if (!publicClient || !address) {
+      const tokenInfo = SUPPORTED_TOKENS[symbol];
+      return {
+        name: tokenInfo.name,
+        symbol,
+        address: tokenAddress,
+        decimals: tokenInfo.decimals,
+        balance: '0',
+        price: symbol === 'WETH' ? 1850 : symbol === 'USDC' ? 1 : symbol === 'DAI' ? 1 : 0
+      } as Token;
+    }
+    
+    const tokenInfo = SUPPORTED_TOKENS[symbol];
+    
+    // For native ETH, handle differently
+    if (symbol === 'ETH') {
+      // TODO: Implement ETH balance fetching
+      return {
+        name: tokenInfo.name,
+        symbol,
+        address: tokenAddress,
+        decimals: tokenInfo.decimals,
+        balance: '0', // This should be fetched from the wallet
+        price: 1850 // Mock price for ETH
+      } as Token;
+    }
 
-    const { data: symbolData } = await useReadContract({
-      address: tokenAddress,
-      abi: TokenABI,
-      functionName: 'symbol',
-    }) as { data: string };
+    try {
+      // Use the public client to read the contract
+      const balanceData = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: TokenABI,
+        functionName: 'balanceOf',
+        args: [address],
+      }) as bigint;
 
-    const { data: decimalsData } = await useReadContract({
-      address: tokenAddress,
-      abi: TokenABI,
-      functionName: 'decimals',
-    }) as { data: number };
+      // For now, we'll use mock prices since we don't have a price feed contract
+      const tokenPrice = symbol === 'WETH' 
+        ? 1850 
+        : symbol === 'USDC' 
+          ? 1 
+          : symbol === 'DAI'
+            ? 1
+            : 0;
 
-    const { data: balanceData } = await useReadContract({
-      address: tokenAddress,
-      abi: TokenABI,
-      functionName: 'balanceOf',
-      args: [address],
-    }) as { data: bigint };
-
-    // For now, we'll use a mock price since we don't have a price feed contract
-    const tokenPrice = tokenAddress === CONTRACT_ADDRESSES.ETH || tokenAddress === CONTRACT_ADDRESSES.WETH 
-      ? 1850 
-      : tokenAddress === CONTRACT_ADDRESSES.USDC 
-        ? 1 
-        : 0;
-
-    return {
-      name: tokenData,
-      symbol: symbolData,
-      address: tokenAddress,
-      decimals: decimalsData,
-      balance: formatUnits(balanceData || BigInt(0), decimalsData),
-      price: tokenPrice
-    } as Token;
+      return {
+        name: tokenInfo.name,
+        symbol,
+        address: tokenAddress,
+        decimals: tokenInfo.decimals,
+        balance: formatUnits(balanceData || BigInt(0), tokenInfo.decimals),
+        price: tokenPrice
+      } as Token;
+    } catch (error) {
+      console.warn(`Error fetching balance for ${symbol}:`, error);
+      return {
+        name: tokenInfo.name,
+        symbol,
+        address: tokenAddress,
+        decimals: tokenInfo.decimals,
+        balance: '0',
+        price: symbol === 'WETH' ? 1850 : symbol === 'USDC' ? 1 : symbol === 'DAI' ? 1 : 0
+      } as Token;
+    }
   };
 
+  // Fetch all token data with retry mechanism
   useEffect(() => {
-    const loadTokens = async () => {
+    let mounted = true;
+    
+    // Skip fetching if no client or address
+    if (!address || !publicClient) {
+      setTokens([]);
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+    
+    const fetchAllTokens = async () => {
       try {
-        setIsLoading(true);
-        const tokenAddresses = [
-          CONTRACT_ADDRESSES.ETH,
-          CONTRACT_ADDRESSES.USDC,
-          CONTRACT_ADDRESSES.WETH,
-        ];
+        const tokenPromises = Object.entries(SUPPORTED_TOKENS).map(([symbol, info]) => 
+          fetchTokenData(info.address as Address, symbol as SupportedTokenSymbol)
+        );
 
-        const tokenDataPromises = tokenAddresses.map(fetchTokenData);
-        const tokenData = await Promise.all(tokenDataPromises);
-        setTokens(tokenData);
+        const tokenData = await Promise.all(tokenPromises);
+        if (mounted) {
+          setTokens(tokenData);
+        }
       } catch (error) {
-        console.error('Error loading tokens:', error);
+        console.error('Error fetching token data:', error);
+        if (mounted) {
+          setTokens([]);
+        }
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
 
-    if (address) {
-      loadTokens();
-    }
-  }, [address]);
+    fetchAllTokens();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [address, publicClient]);
 
-  return { tokens, isLoading };
+  return {
+    tokens,
+    isLoading
+  };
 } 

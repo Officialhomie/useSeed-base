@@ -1,24 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
-import { parseUnits, formatUnits, Address } from 'viem';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseUnits, formatUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
-import { prepareSwapWithSavingsParams, calculateSwapWithSavingsGasLimit } from '../uniswap/UniswapV4Integration';
 import { SpendSaveStrategy } from './useSpendSaveStrategy';
 import { calculateSavingsAmount } from '../utils/savingsCalculator';
+import { getSwapQuote, executeSwap } from '../uniswap/swapRouter';
+import { SUPPORTED_TOKENS, SupportedTokenSymbol, getTokenBySymbol } from '../uniswap/tokens';
+import JSBI from 'jsbi';
 
 interface UseSwapWithSavingsProps {
-  inputToken: {
-    address: Address;
-    decimals: number;
-    symbol: string;
-  };
-  outputToken: {
-    address: Address;
-    decimals: number;
-    symbol: string;
-  };
+  fromToken: SupportedTokenSymbol;
+  toToken: SupportedTokenSymbol;
   amount: string;
-  slippage: number; // As a percentage (e.g. 0.5 for 0.5%)
+  slippage: number;
   strategy: SpendSaveStrategy;
   overridePercentage: number | null;
   disableSavings: boolean;
@@ -46,86 +40,85 @@ export default function useSwapWithSavings(
   const [savedAmount, setSavedAmount] = useState('0');
   const [estimatedOutput, setEstimatedOutput] = useState('0');
   const [transactionHash, setTransactionHash] = useState<`0x${string}` | null>(null);
-
-  // If props is null, return default values
-  if (!props) {
-    return {
-      executionStatus: 'idle',
-      error: null,
-      transactionHash: null,
-      savedAmount: '0',
-      actualSwapAmount: '0',
-      estimatedOutput: '0',
-      executeSwap: async () => {},
-      isLoading: false,
-      isSuccess: false,
-      isPreparing: false
-    };
-  }
-
-  const { inputToken, outputToken, amount, slippage, strategy, overridePercentage, disableSavings } = props;
-
-  // Calculate the savings amount
-  const calculatedSavingsAmount = calculateSavingsAmount(
-    amount,
-    strategy,
-    overridePercentage,
-    disableSavings,
-    inputToken.decimals
-  );
-
-  // Calculate actual swap amount (after savings deduction for INPUT type savings)
-  const actualSwapAmount = strategy.savingsTokenType === 0 && !disableSavings
-    ? (parseFloat(amount) - parseFloat(calculatedSavingsAmount)).toString()
-    : amount;
-
-  // Get price quote from Uniswap
-  const { data: quoteData } = useReadContract({
-    address: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
-    abi: [
-      {
-        name: 'getQuote',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-          { name: 'tokenIn', type: 'address' },
-          { name: 'tokenOut', type: 'address' },
-          { name: 'amountIn', type: 'uint256' }
-        ],
-        outputs: [{ name: 'amountOut', type: 'uint256' }]
-      }
-    ],
-    functionName: 'getQuote',
-    args: address && amount && parseFloat(amount) > 0 ? [
-      inputToken.address,
-      outputToken.address,
-      parseUnits(actualSwapAmount, inputToken.decimals)
-    ] : undefined
-  });
-
-  // Update estimated output when quote changes
-  useEffect(() => {
-    if (quoteData) {
-      setEstimatedOutput(formatUnits(quoteData, outputToken.decimals));
-    }
-  }, [quoteData, outputToken.decimals]);
-
-  // Calculate minimum amount out based on slippage
-  const minAmountOut = quoteData
-    ? quoteData - (quoteData * BigInt(Math.floor(slippage * 100))) / BigInt(10000)
-    : BigInt(0);
-
-  // Write contract hook for executing the swap
-  const { writeContractAsync, isPending } = useWriteContract();
-
-  // Track transaction status
+  const { writeContractAsync } = useWriteContract();
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({
     hash: transactionHash || undefined,
   });
 
+  // Calculate values based on props
+  const fromToken = props?.fromToken || 'ETH';
+  const toToken = props?.toToken || 'USDC';
+  const amount = props?.amount || '0';
+  const slippage = props?.slippage || 0.5;
+  const strategy = props?.strategy || {
+    id: 0,
+    name: 'Default',
+    description: '',
+    currentPercentage: 0,
+    autoIncrement: 0,
+    maxPercentage: 0,
+    goalAmount: BigInt(0),
+    roundUpSavings: false,
+    enableDCA: false,
+    savingsTokenType: 0,
+    specificSavingsToken: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+    isConfigured: false
+  };
+  const overridePercentage = props?.overridePercentage || null;
+  const disableSavings = props?.disableSavings || false;
+
+  // Calculate the savings amount
+  const calculatedSavingsAmount = calculateSavingsAmount(
+    amount,
+    strategy as SpendSaveStrategy,
+    overridePercentage,
+    disableSavings
+  );
+
+  // Calculate actual swap amount (after savings deduction for INPUT type savings)
+  const actualSwapAmount = strategy.savingsTokenType === 0 && !disableSavings && props
+    ? (parseFloat(amount) - parseFloat(calculatedSavingsAmount)).toString()
+    : amount;
+
+  // Get quote using Uniswap SDK
+  useEffect(() => {
+    const fetchQuote = async () => {
+      if (!props || !address || !amount || parseFloat(amount) <= 0) return;
+
+      try {
+        const fromTokenInfo = getTokenBySymbol(fromToken);
+        const toTokenInfo = getTokenBySymbol(toToken);
+        
+        if (!fromTokenInfo || !toTokenInfo) {
+          throw new Error('Invalid token configuration');
+        }
+
+        const amountInBigInt = BigInt(parseUnits(actualSwapAmount, fromTokenInfo.decimals));
+        
+        const { quote } = await getSwapQuote(
+          fromToken,
+          toToken,
+          amountInBigInt
+        );
+
+        // Convert JSBI to bigint for formatting
+        const quoteBigInt = BigInt(quote.quotient.toString());
+        setEstimatedOutput(formatUnits(
+          quoteBigInt,
+          toTokenInfo.decimals
+        ));
+      } catch (err) {
+        console.error('Error fetching quote:', err);
+        setError(err instanceof Error ? err : new Error('Failed to fetch quote'));
+      }
+    };
+
+    fetchQuote();
+  }, [address, fromToken, toToken, actualSwapAmount, amount, props]);
+
   // Execute the swap
-  const executeSwap = async () => {
-    if (!address || !amount || parseFloat(amount) <= 0) {
+  const executeSwapFunction = async () => {
+    if (!props || !address || !amount || parseFloat(amount) <= 0) {
       throw new Error('Invalid swap parameters');
     }
 
@@ -133,19 +126,30 @@ export default function useSwapWithSavings(
       setExecutionStatus('preparing');
       setError(null);
 
-      // Prepare swap parameters
-      const swapParams = prepareSwapWithSavingsParams({
-        tokenIn: inputToken.address,
-        tokenOut: outputToken.address,
-        recipient: address,
-        amountIn: parseUnits(actualSwapAmount, inputToken.decimals),
-        amountOutMinimum: minAmountOut,
-      }, address);
+      const fromTokenInfo = getTokenBySymbol(fromToken);
+      if (!fromTokenInfo) {
+        throw new Error('Invalid from token');
+      }
 
-      // Calculate gas limit
-      const gasLimit = calculateSwapWithSavingsGasLimit(
-        strategy.savingsTokenType,
-        strategy.enableDCA
+      const amountInBigInt = BigInt(parseUnits(actualSwapAmount, fromTokenInfo.decimals));
+
+      // Get quote and route
+      const { route } = await getSwapQuote(
+        fromToken,
+        toToken,
+        amountInBigInt
+      );
+
+      // Get swap parameters
+      const swapParams = await executeSwap(
+        {
+          fromToken,
+          toToken,
+          amount: amountInBigInt,
+          slippageTolerance: slippage,
+          recipient: address
+        },
+        route
       );
 
       // Execute the swap
@@ -153,57 +157,29 @@ export default function useSwapWithSavings(
         address: CONTRACT_ADDRESSES.UNISWAP_BASE_SEPOLIA_UNIVERSAL_ROUTER,
         abi: [
           {
-            name: 'exactInputSingle',
+            name: 'execute',
             type: 'function',
             stateMutability: 'payable',
             inputs: [
-              {
-                name: 'params',
-                type: 'tuple',
-                components: [
-                  { name: 'tokenIn', type: 'address' },
-                  { name: 'tokenOut', type: 'address' },
-                  { name: 'recipient', type: 'address' },
-                  { name: 'amountIn', type: 'uint256' },
-                  { name: 'amountOutMinimum', type: 'uint256' },
-                  { name: 'sqrtPriceLimitX96', type: 'uint160' },
-                  { name: 'hookData', type: 'bytes' }
-                ]
-              }
+              { name: 'commands', type: 'bytes' },
+              { name: 'inputs', type: 'bytes[]' }
             ],
-            outputs: [{ name: 'amountOut', type: 'uint256' }]
+            outputs: []
           }
         ],
-        functionName: 'exactInputSingle',
-        args: [swapParams],
-        gas: gasLimit,
+        functionName: 'execute',
+        args: [swapParams.commands, swapParams.inputs] as const,
+        value: fromToken === 'ETH' ? BigInt(parseUnits(amount, 18)) : BigInt(0),
       });
 
-      // Update state with transaction hash
       setTransactionHash(txHash);
       setExecutionStatus('pending');
       setSavedAmount(calculatedSavingsAmount);
 
-    } catch (err) {
-      setExecutionStatus('error');
-      const error = err instanceof Error ? err : new Error('Unknown error occurred');
-      
-      // Extract specific error messages from contract errors
-      if (error.message.includes('InsufficientSavings')) {
-        setError(new Error('Insufficient savings balance'));
-      } else if (error.message.includes('SlippageToleranceExceeded')) {
-        setError(new Error('Price movement exceeded slippage tolerance'));
-      } else if (error.message.includes('ZeroAmountSwap')) {
-        setError(new Error('Cannot swap zero amount'));
-      } else if (error.message.includes('SwapExecutionFailed')) {
-        setError(new Error('Swap execution failed - try increasing slippage tolerance'));
-      } else if (error.message.includes('user rejected transaction')) {
-        setError(new Error('Transaction rejected by user'));
-      } else {
-        setError(error);
-      }
-      
+    } catch (error) {
       console.error('Swap error:', error);
+      setError(error instanceof Error ? error : new Error('Failed to execute swap'));
+      setExecutionStatus('error');
     }
   };
 
@@ -211,11 +187,11 @@ export default function useSwapWithSavings(
     executionStatus,
     error,
     transactionHash,
-    savedAmount: calculatedSavingsAmount,
+    savedAmount,
     actualSwapAmount,
     estimatedOutput,
-    executeSwap,
-    isLoading: isPending || isLoading,
+    executeSwap: executeSwapFunction,
+    isLoading,
     isSuccess,
     isPreparing: executionStatus === 'preparing'
   };

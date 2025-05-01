@@ -23,6 +23,7 @@ export const CONTRACT_ADDRESSES = {
   ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address,
   USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address,
   WETH: "0x4200000000000000000000000000000000000006" as Address,
+  DAI: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb" as Address, // Base Sepolia DAI
 } as const;
 
 // Import ABIs
