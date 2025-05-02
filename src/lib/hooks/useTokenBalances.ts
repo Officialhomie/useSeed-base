@@ -1,8 +1,7 @@
-import { useAccount } from 'wagmi';
-import { useBalance } from 'wagmi';
+import { useAccount, useBalance } from 'wagmi';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { useCallback, useEffect, useState } from 'react';
-import { formatUnits } from 'viem';
+import { formatUnits, Address } from 'viem';
 
 export interface TokenBalance {
   symbol: string;
@@ -15,11 +14,39 @@ export interface TokenBalance {
   error: Error | null;
 }
 
+// Default token data
+const DEFAULT_TOKEN_DATA = {
+  ETH: {
+    symbol: 'ETH',
+    name: 'Ethereum',
+    address: CONTRACT_ADDRESSES.ETH,
+    decimals: 18
+  },
+  USDC: {
+    symbol: 'USDC',
+    name: 'USD Coin',
+    address: CONTRACT_ADDRESSES.USDC,
+    decimals: 6
+  },
+  WETH: {
+    symbol: 'WETH',
+    name: 'Wrapped Ether',
+    address: CONTRACT_ADDRESSES.WETH,
+    decimals: 18
+  },
+  DAI: {
+    symbol: 'DAI',
+    name: 'Dai Stablecoin',
+    address: CONTRACT_ADDRESSES.DAI,
+    decimals: 18
+  }
+};
+
 export function useTokenBalances() {
   const { address, isConnected } = useAccount();
   const [tokenBalances, setTokenBalances] = useState<{[key: string]: TokenBalance}>({});
   
-  // Fetch native ETH balance
+  // Fetch native ETH balance with error handling
   const {
     data: ethBalance,
     isLoading: isLoadingEth,
@@ -28,11 +55,14 @@ export function useTokenBalances() {
   } = useBalance({
     address,
     query: {
-      enabled: !!address
+      enabled: !!address,
+      retry: 1,
+      staleTime: 15000,
+      refetchOnWindowFocus: false
     }
   });
 
-  // Fetch USDC balance
+  // Fetch USDC balance with error handling
   const {
     data: usdcBalance,
     isLoading: isLoadingUsdc,
@@ -42,11 +72,14 @@ export function useTokenBalances() {
     address,
     token: CONTRACT_ADDRESSES.USDC,
     query: {
-      enabled: !!address
+      enabled: !!address,
+      retry: 1,
+      staleTime: 15000,
+      refetchOnWindowFocus: false
     }
   });
 
-  // Fetch WETH balance
+  // Fetch WETH balance with error handling
   const {
     data: wethBalance,
     isLoading: isLoadingWeth,
@@ -56,11 +89,14 @@ export function useTokenBalances() {
     address,
     token: CONTRACT_ADDRESSES.WETH,
     query: {
-      enabled: !!address
+      enabled: !!address,
+      retry: 1,
+      staleTime: 15000,
+      refetchOnWindowFocus: false
     }
   });
 
-  // Fetch DAI balance
+  // Fetch DAI balance with error handling
   const {
     data: daiBalance,
     isLoading: isLoadingDai,
@@ -70,71 +106,44 @@ export function useTokenBalances() {
     address,
     token: CONTRACT_ADDRESSES.DAI,
     query: {
-      enabled: !!address
+      enabled: !!address,
+      retry: 1,
+      staleTime: 15000,
+      refetchOnWindowFocus: false
     }
   });
+
+  // Create a token balance object
+  const createTokenBalance = (
+    symbol: keyof typeof DEFAULT_TOKEN_DATA,
+    balance: any,
+    isLoading: boolean,
+    error: any
+  ): TokenBalance => {
+    const defaultData = DEFAULT_TOKEN_DATA[symbol];
+    
+    return {
+      symbol,
+      name: defaultData.name,
+      address: defaultData.address,
+      balance: balance?.value?.toString() || '0',
+      formattedBalance: balance?.formatted || '0',
+      decimals: balance?.decimals || defaultData.decimals,
+      isLoading,
+      error: error as Error | null
+    };
+  };
 
   // Update balances when they change
   useEffect(() => {
     if (!address) return;
 
-    const balances: {[key: string]: TokenBalance} = {};
-
-    // ETH
-    if (ethBalance) {
-      balances.ETH = {
-        symbol: 'ETH',
-        name: 'Ethereum',
-        address: CONTRACT_ADDRESSES.ETH,
-        balance: ethBalance.value.toString(),
-        formattedBalance: ethBalance.formatted,
-        decimals: ethBalance.decimals,
-        isLoading: isLoadingEth,
-        error: ethError as Error | null,
-      };
-    }
-
-    // USDC
-    if (usdcBalance) {
-      balances.USDC = {
-        symbol: 'USDC',
-        name: 'USD Coin',
-        address: CONTRACT_ADDRESSES.USDC,
-        balance: usdcBalance.value.toString(),
-        formattedBalance: usdcBalance.formatted,
-        decimals: usdcBalance.decimals,
-        isLoading: isLoadingUsdc,
-        error: usdcError as Error | null,
-      };
-    }
-
-    // WETH
-    if (wethBalance) {
-      balances.WETH = {
-        symbol: 'WETH',
-        name: 'Wrapped Ether',
-        address: CONTRACT_ADDRESSES.WETH,
-        balance: wethBalance.value.toString(),
-        formattedBalance: wethBalance.formatted,
-        decimals: wethBalance.decimals,
-        isLoading: isLoadingWeth,
-        error: wethError as Error | null,
-      };
-    }
-
-    // DAI
-    if (daiBalance) {
-      balances.DAI = {
-        symbol: 'DAI',
-        name: 'Dai Stablecoin',
-        address: CONTRACT_ADDRESSES.DAI,
-        balance: daiBalance.value.toString(),
-        formattedBalance: daiBalance.formatted,
-        decimals: daiBalance.decimals,
-        isLoading: isLoadingDai,
-        error: daiError as Error | null,
-      };
-    }
+    const balances: {[key: string]: TokenBalance} = {
+      ETH: createTokenBalance('ETH', ethBalance, isLoadingEth, ethError),
+      USDC: createTokenBalance('USDC', usdcBalance, isLoadingUsdc, usdcError),
+      WETH: createTokenBalance('WETH', wethBalance, isLoadingWeth, wethError),
+      DAI: createTokenBalance('DAI', daiBalance, isLoadingDai, daiError)
+    };
 
     setTokenBalances(balances);
   }, [
@@ -155,8 +164,12 @@ export function useTokenBalances() {
     refetchDai();
   }, [address, refetchEth, refetchUsdc, refetchWeth, refetchDai]);
 
-  // Return loading state if any token is still loading
-  const isLoading = isLoadingEth || isLoadingUsdc || isLoadingWeth || isLoadingDai;
+  // Return loading state if any token is still loading and doesn't have error
+  // Don't block the whole UI just because one token is having issues
+  const isLoading = (isLoadingEth && !ethError) || 
+                   (isLoadingUsdc && !usdcError) || 
+                   (isLoadingWeth && !wethError) || 
+                   (isLoadingDai && !daiError);
 
   return {
     tokenBalances,

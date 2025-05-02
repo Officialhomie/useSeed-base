@@ -22,6 +22,7 @@ interface SwapConfirmationModalProps {
   usingUniswapV4?: boolean;
   dcaEnabled?: boolean;
   dcaTargetToken?: string;
+  usingFallbackGas?: boolean;
 }
 
 const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
@@ -38,7 +39,8 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
   slippage,
   usingUniswapV4 = true,
   dcaEnabled = false,
-  dcaTargetToken
+  dcaTargetToken,
+  usingFallbackGas = false
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { address } = useAccount();
@@ -186,6 +188,18 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
             <div className="flex-1">
               <p className="text-sm text-red-400">
                 This trade has a high price impact. You will lose a significant amount due to slippage.
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Warning for fallback gas estimation */}
+        {usingFallbackGas && (
+          <div className="flex items-start space-x-2 bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-3 mb-4">
+            <FiAlertCircle className="text-yellow-400 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-yellow-400">
+                Using estimated gas limits. The transaction might fail or cost more than expected.
               </p>
             </div>
           </div>

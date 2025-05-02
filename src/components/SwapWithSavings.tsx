@@ -72,7 +72,9 @@ export default function SwapWithSavings() {
     executeSwap,
     isLoading: isSwapping,
     isSuccess,
-    transactionHash
+    transactionHash,
+    usingFallbackGas,
+    error
   } = useSwapWithSavings(
     fromToken && toToken ? {
       fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC' | 'DAI',
@@ -101,19 +103,58 @@ export default function SwapWithSavings() {
     setToAmount("");
   };
   
-  // Calculate gas buffer based on balance
-  const calculateGasBuffer = (ethBalance: number): number => {
-    let gasBuffer = 0.05; // Default 0.05 ETH buffer
+  // Calculate gas buffer - use fixed microamount for consistency
+  const calculateGasBuffer = (): number => {
+    // Set fixed gas buffer to 0.0005411 ETH (approximately $1)
+    // This is extremely conservative to support micro-transactions
+    return 0.0005411;
+  };
+  
+  // Find and update handleMaxClick function
+  const handleMaxClick = () => {
+    if (!fromToken || !tokenBalances) return;
     
-    // For small balances, use percentage-based buffer instead
-    if (ethBalance < 0.1) {
-      gasBuffer = ethBalance * 0.3; // 30% of balance for very small amounts
-    } else if (ethBalance < 0.5) {
-      gasBuffer = 0.03; // 0.03 ETH for moderate amounts
+    try {
+      let maxAmount = 0;
+      
+      if (fromToken.symbol === 'ETH') {
+        const ethBalance = parseFloat(tokenBalances.ETH.formattedBalance);
+        
+        // Fixed gas buffer of 0.0005411 ETH (approximately $1)
+        const gasBuffer = calculateGasBuffer();
+        
+        // Prevent negative values if balance is too small
+        maxAmount = Math.max(0, ethBalance - gasBuffer);
+        
+        // If balance is too small to support a transaction
+        if (ethBalance <= gasBuffer) {
+          // Show notification
+          addNotification({
+            type: 'warning',
+            title: 'Low ETH Balance',
+            message: `Your ETH balance (${ethBalance.toFixed(4)} ETH) is too low to swap. Keep $1 (0.0005411 ETH) for gas fees.`
+          });
+          return; // Exit early
+        }
+      } else {
+        // For non-ETH tokens, use full balance
+        maxAmount = parseFloat(tokenBalances[fromToken.symbol].formattedBalance);
+      }
+      
+      // Convert to a string with 6 decimal places max
+      const formattedMaxAmount = maxAmount.toFixed(6);
+      
+      // Remove trailing zeros
+      const trimmedMaxAmount = formattedMaxAmount.replace(/\.?0+$/, "");
+      
+      // Set the amount
+      setFromAmount(trimmedMaxAmount);
+      
+      // Clear any validation errors
+      setValidationError('');
+    } catch (error) {
+      console.error('Error calculating max amount:', error);
     }
-    
-    // Ensure we have at least 0.01 ETH for gas
-    return Math.max(gasBuffer, 0.01);
   };
   
   // Handle from amount change
@@ -136,9 +177,9 @@ export default function SwapWithSavings() {
       }
       // For ETH, also check if we're leaving enough for gas
       else if (fromToken.symbol === 'ETH') {
-        const gasBuffer = calculateGasBuffer(balance);
+        const gasBuffer = calculateGasBuffer();
         if (amount > balance - gasBuffer) {
-          setValidationError(`Leave ~${gasBuffer.toFixed(3)} ETH for gas fees`);
+          setValidationError(`Leave $1 (${0.0005411} ETH) for gas fees`);
         }
       }
     }
@@ -158,46 +199,6 @@ export default function SwapWithSavings() {
     setSlippage(value);
   };
   
-  // Handle max amount button click
-  const handleMaxClick = () => {
-    if (!fromToken) return;
-    
-    if (tokenBalances && tokenBalances[fromToken.symbol]) {
-      // For ETH, leave more for gas - use dynamic calculation
-      if (fromToken.symbol === 'ETH') {
-        const ethBalance = parseFloat(tokenBalances.ETH.formattedBalance);
-        
-        // Different gas buffer based on total balance
-        let gasBuffer = 0.05; // Default 0.05 ETH buffer
-        
-        // For small balances, use percentage-based buffer instead
-        if (ethBalance < 0.1) {
-          gasBuffer = ethBalance * 0.3; // 30% of balance for very small amounts
-        } else if (ethBalance < 0.5) {
-          gasBuffer = 0.03; // 0.03 ETH for moderate amounts
-        }
-        
-        // Ensure we have at least 0.01 ETH for gas
-        gasBuffer = Math.max(gasBuffer, 0.01);
-        
-        // Calculate max amount
-        const maxAmount = Math.max(0, ethBalance - gasBuffer).toFixed(6);
-        setFromAmount(maxAmount);
-        
-        // Show notification about gas reservation
-        if (ethBalance <= gasBuffer) {
-          addNotification({
-            type: 'warning',
-            title: 'Low ETH Balance',
-            message: `Your ETH balance (${ethBalance.toFixed(4)} ETH) is too low to swap. Keep ETH for gas fees.`
-          });
-        }
-      } else {
-        setFromAmount(tokenBalances[fromToken.symbol].formattedBalance);
-      }
-    }
-  };
-  
   // Validate amount before swap
   const validateSwapAmount = () => {
     if (!fromToken || !fromAmount) return false;
@@ -210,9 +211,16 @@ export default function SwapWithSavings() {
     // Amount user is trying to swap
     const amount = parseFloat(fromAmount);
     
+    // For extremely small amounts (less than $5 in ETH), reduce the gas buffer
+    if (fromToken.symbol === 'ETH' && amount < 0.003) {
+      // For micro-transactions, use a tiny buffer of just 0.0003 ETH
+      const microGasBuffer = 0.0003;
+      return amount <= currentBalance - microGasBuffer;
+    }
+    
     // For ETH, ensure we're leaving enough for gas
     if (fromToken.symbol === 'ETH') {
-      const gasBuffer = calculateGasBuffer(currentBalance);
+      const gasBuffer = calculateGasBuffer();
       // Check if amount + gas buffer exceeds balance
       return amount <= currentBalance - gasBuffer;
     }
@@ -230,7 +238,7 @@ export default function SwapWithSavings() {
       addNotification({
         type: 'error',
         title: 'Insufficient Balance',
-        message: 'You need to leave some ETH for gas. Try using a smaller amount or the MAX button.'
+        message: 'You need to leave $1 (0.0005411 ETH) for gas fees. Try using a smaller amount or the MAX button.'
       });
       return;
     }
@@ -438,7 +446,7 @@ export default function SwapWithSavings() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              For ETH transactions, approximately {calculateGasBuffer(parseFloat(tokenBalances.ETH.formattedBalance)).toFixed(3)} ETH is reserved for gas fees
+              For ETH transactions, approximately {calculateGasBuffer().toFixed(3)} ETH is reserved for gas fees
             </div>
           )}
         </div>
@@ -551,6 +559,26 @@ export default function SwapWithSavings() {
           }
         </button>
         
+        {/* Fallback Gas Warning */}
+        {usingFallbackGas && (
+          <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800/30 rounded-lg text-xs text-yellow-400 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Using estimated gas limits - this may require 30% more ETH than usual for gas fees.</span>
+          </div>
+        )}
+
+        {/* For extremely small transactions, show an additional notice */}
+        {fromToken?.symbol === 'ETH' && fromAmount && parseFloat(fromAmount) < 0.003 && (
+          <div className="mt-2 p-2 bg-blue-900/20 border border-blue-800/30 rounded-lg text-xs text-blue-400 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Micro-transaction detected. Using optimized gas settings.</span>
+          </div>
+        )}
+        
         {/* Transaction status */}
         {executionStatus === 'success' && (
           <div className="mt-4 p-3 bg-green-900/20 border border-green-800/30 rounded-lg text-sm text-green-400">
@@ -573,6 +601,15 @@ export default function SwapWithSavings() {
             Swap failed. Please try again.
           </div>
         )}
+
+        {error && (
+          <div className="mt-2 p-2 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{error.message}</span>
+          </div>
+        )}
       </div>
       
       {/* Confirmation Modal */}
@@ -592,6 +629,7 @@ export default function SwapWithSavings() {
           usingUniswapV4={true}
           dcaEnabled={dcaEnabled}
           dcaTargetToken={dcaTargetToken ? tokens.find(t => t.address === dcaTargetToken)?.symbol : undefined}
+          usingFallbackGas={usingFallbackGas}
         />
       )}
       
