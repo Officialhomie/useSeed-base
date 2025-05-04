@@ -14,6 +14,7 @@ import SwapConfirmationModal from './SwapConfirmationModal';
 import SpendSaveEventListeners from './SpendSaveEventListeners';
 import { useNotification } from './NotificationManager';
 import TokenSelector from './TokenSelector';
+import SwapWithSavingsGasInfo from './SwapWithSavingsGasInfo';
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
@@ -74,7 +75,9 @@ export default function SwapWithSavings() {
     isSuccess,
     transactionHash,
     usingFallbackGas,
-    error
+    error,
+    gasEstimate,
+    sizeCategory
   } = useSwapWithSavings(
     fromToken && toToken ? {
       fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC' | 'DAI',
@@ -439,16 +442,6 @@ export default function SwapWithSavings() {
               isLoading={isLoadingTokens}
             />
           </div>
-          
-          {/* Add gas info for ETH */}
-          {fromToken && fromToken.symbol === 'ETH' && tokenBalances && tokenBalances.ETH && (
-            <div className="mt-2 text-xs flex items-center text-blue-300">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              For ETH transactions, approximately {calculateGasBuffer().toFixed(3)} ETH is reserved for gas fees
-            </div>
-          )}
         </div>
         
         {/* Show validation error if exists */}
@@ -559,26 +552,17 @@ export default function SwapWithSavings() {
           }
         </button>
         
-        {/* Fallback Gas Warning */}
-        {usingFallbackGas && (
-          <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-800/30 rounded-lg text-xs text-yellow-400 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span>Using estimated gas limits - this may require 30% more ETH than usual for gas fees.</span>
-          </div>
+        {/* Gas Info Display */}
+        {fromToken && (
+          <SwapWithSavingsGasInfo
+            fromToken={fromToken.symbol}
+            fromAmount={fromAmount}
+            gasEstimate={gasEstimate}
+            usingFallbackGas={usingFallbackGas}
+            isLoading={isSwapping || executionStatus === 'preparing'}
+          />
         )}
 
-        {/* For extremely small transactions, show an additional notice */}
-        {fromToken?.symbol === 'ETH' && fromAmount && parseFloat(fromAmount) < 0.003 && (
-          <div className="mt-2 p-2 bg-blue-900/20 border border-blue-800/30 rounded-lg text-xs text-blue-400 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>Micro-transaction detected. Using optimized gas settings.</span>
-          </div>
-        )}
-        
         {/* Transaction status */}
         {executionStatus === 'success' && (
           <div className="mt-4 p-3 bg-green-900/20 border border-green-800/30 rounded-lg text-sm text-green-400">
@@ -630,6 +614,7 @@ export default function SwapWithSavings() {
           dcaEnabled={dcaEnabled}
           dcaTargetToken={dcaTargetToken ? tokens.find(t => t.address === dcaTargetToken)?.symbol : undefined}
           usingFallbackGas={usingFallbackGas}
+          gasEstimate={gasEstimate}
         />
       )}
       

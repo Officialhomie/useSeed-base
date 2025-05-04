@@ -1,17 +1,13 @@
-import { Token } from '@uniswap/sdk-core'
+import { Token, Ether } from '@uniswap/sdk-core'
 import { CONTRACT_ADDRESSES } from '../contracts'
 
 // Chain ID for Base Sepolia
 export const CHAIN_ID = 84532
 
-// Native ETH token representation
+// Native ETH representation using sdk-core helper
 export const NATIVE_ETH = {
-  name: 'Ethereum',
-  symbol: 'ETH',
-  decimals: 18,
-  isNative: true,
+  ...Ether.onChain(CHAIN_ID),
   address: CONTRACT_ADDRESSES.ETH,
-  chainId: CHAIN_ID,
 }
 
 // Token Instances using Uniswap SDK

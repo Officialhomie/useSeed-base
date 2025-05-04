@@ -1,7 +1,19 @@
 import { useAccount, useBalance } from 'wagmi';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { useCallback, useEffect, useState } from 'react';
-import { formatUnits, Address } from 'viem';
+import { formatUnits, createPublicClient, http } from 'viem';
+import { baseSepolia } from 'viem/chains';
+
+// Standard ERC20 ABI for balanceOf - only this one should be used for external tokens
+const erc20BalanceOfAbi = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: 'balance', type: 'uint256' }]
+  }
+];
 
 export interface TokenBalance {
   symbol: string;
@@ -42,76 +54,107 @@ const DEFAULT_TOKEN_DATA = {
   }
 };
 
+// Create public client for fallback
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+});
+
+// Function to get balance directly via RPC
+async function getTokenBalanceFallback(tokenAddress: string, userAddress: string, decimals: number) {
+  try {
+    // For ETH, use getBalance
+    if (tokenAddress === CONTRACT_ADDRESSES.ETH) {
+      const balance = await publicClient.getBalance({ address: userAddress as `0x${string}` });
+      return {
+        value: balance,
+        formatted: formatUnits(balance, 18),
+        decimals: 18,
+        symbol: 'ETH'
+      };
+    }
+    
+    // For ERC-20 tokens, try to directly access each token contract (not the hook)
+    try {
+      const balance = await publicClient.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: erc20BalanceOfAbi,
+        functionName: 'balanceOf',
+        args: [userAddress as `0x${string}`]
+      });
+      
+      return {
+        value: balance,
+        formatted: formatUnits(balance as bigint, decimals),
+        decimals,
+        symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
+          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address === tokenAddress
+        ) || 'UNKNOWN'
+      };
+    } catch (contractError) {
+      // If contract call fails, return zero balance
+      console.log(`External token not found or doesn't support standard balanceOf: ${tokenAddress}`);
+      return {
+        value: BigInt(0),
+        formatted: '0',
+        decimals,
+        symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
+          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address === tokenAddress
+        ) || 'UNKNOWN'
+      };
+    }
+  } catch (error) {
+    console.error(`Fallback balance fetch failed for ${tokenAddress}:`, error);
+    return {
+      value: BigInt(0),
+      formatted: '0',
+      decimals,
+      symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
+        key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address === tokenAddress
+      ) || 'UNKNOWN'
+    };
+  }
+}
+
 export function useTokenBalances() {
   const { address, isConnected } = useAccount();
   const [tokenBalances, setTokenBalances] = useState<{[key: string]: TokenBalance}>({});
+  const [isLoading, setIsLoading] = useState(false);
   
-  // Fetch native ETH balance with error handling
-  const {
-    data: ethBalance,
-    isLoading: isLoadingEth,
-    error: ethError,
-    refetch: refetchEth
-  } = useBalance({
-    address,
-    query: {
-      enabled: !!address,
-      retry: 1,
-      staleTime: 15000,
-      refetchOnWindowFocus: false
-    }
-  });
-
-  // Fetch USDC balance with error handling
-  const {
-    data: usdcBalance,
-    isLoading: isLoadingUsdc,
-    error: usdcError,
-    refetch: refetchUsdc
-  } = useBalance({
-    address,
-    token: CONTRACT_ADDRESSES.USDC,
-    query: {
-      enabled: !!address,
-      retry: 1,
-      staleTime: 15000,
-      refetchOnWindowFocus: false
-    }
-  });
-
-  // Fetch WETH balance with error handling
-  const {
-    data: wethBalance,
-    isLoading: isLoadingWeth,
-    error: wethError,
-    refetch: refetchWeth
-  } = useBalance({
-    address,
-    token: CONTRACT_ADDRESSES.WETH,
-    query: {
-      enabled: !!address,
-      retry: 1,
-      staleTime: 15000,
-      refetchOnWindowFocus: false
-    }
-  });
-
-  // Fetch DAI balance with error handling
-  const {
-    data: daiBalance,
-    isLoading: isLoadingDai,
-    error: daiError,
-    refetch: refetchDai
-  } = useBalance({
-    address,
-    token: CONTRACT_ADDRESSES.DAI,
-    query: {
-      enabled: !!address,
-      retry: 1,
-      staleTime: 15000,
-      refetchOnWindowFocus: false
-    }
-  });
+  // Fetch all balances using the direct RPC method
+  useEffect(() => {
+    if (!address) return;
+    
+    const fetchBalances = async () => {
+      setIsLoading(true);
+      
+      try {
+        const results = await Promise.all([
+          getTokenBalanceFallback(CONTRACT_ADDRESSES.ETH, address, 18),
+          getTokenBalanceFallback(CONTRACT_ADDRESSES.USDC, address, 6),
+          getTokenBalanceFallback(CONTRACT_ADDRESSES.WETH, address, 18),
+          getTokenBalanceFallback(CONTRACT_ADDRESSES.DAI, address, 18)
+        ]);
+        
+        const [ethBalance, usdcBalance, wethBalance, daiBalance] = results;
+        
+        const balances: {[key: string]: TokenBalance} = {
+          ETH: createTokenBalance('ETH', ethBalance, false, null),
+          USDC: createTokenBalance('USDC', usdcBalance, false, null),
+          WETH: createTokenBalance('WETH', wethBalance, false, null),
+          DAI: createTokenBalance('DAI', daiBalance, false, null),
+        };
+        
+        setTokenBalances(balances);
+      } catch (error) {
+        console.error("Error fetching balances:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchBalances();
+  }, [address]);
 
   // Create a token balance object
   const createTokenBalance = (
@@ -134,42 +177,13 @@ export function useTokenBalances() {
     };
   };
 
-  // Update balances when they change
-  useEffect(() => {
-    if (!address) return;
-
-    const balances: {[key: string]: TokenBalance} = {
-      ETH: createTokenBalance('ETH', ethBalance, isLoadingEth, ethError),
-      USDC: createTokenBalance('USDC', usdcBalance, isLoadingUsdc, usdcError),
-      WETH: createTokenBalance('WETH', wethBalance, isLoadingWeth, wethError),
-      DAI: createTokenBalance('DAI', daiBalance, isLoadingDai, daiError)
-    };
-
-    setTokenBalances(balances);
-  }, [
-    address, 
-    ethBalance, isLoadingEth, ethError,
-    usdcBalance, isLoadingUsdc, usdcError,
-    wethBalance, isLoadingWeth, wethError,
-    daiBalance, isLoadingDai, daiError
-  ]);
-
   // Refresh all balances
   const refreshBalances = useCallback(() => {
     if (!address) return;
     
-    refetchEth();
-    refetchUsdc();
-    refetchWeth();
-    refetchDai();
-  }, [address, refetchEth, refetchUsdc, refetchWeth, refetchDai]);
-
-  // Return loading state if any token is still loading and doesn't have error
-  // Don't block the whole UI just because one token is having issues
-  const isLoading = (isLoadingEth && !ethError) || 
-                   (isLoadingUsdc && !usdcError) || 
-                   (isLoadingWeth && !wethError) || 
-                   (isLoadingDai && !daiError);
+    // Force a re-render that will trigger the useEffect
+    setTokenBalances({});
+  }, [address]);
 
   return {
     tokenBalances,

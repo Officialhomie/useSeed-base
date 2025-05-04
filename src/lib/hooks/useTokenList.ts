@@ -20,7 +20,18 @@ export function useTokenList() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Get token balances
+  // For standard ERC20 tokens
+  const erc20BalanceOfAbi = [
+    {
+      name: 'balanceOf',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [{ name: 'account', type: 'address' }],
+      outputs: [{ name: 'balance', type: 'uint256' }]
+    }
+  ];
+
+  // Fetch token data with proper error handling
   const fetchTokenData = async (tokenAddress: Address, symbol: SupportedTokenSymbol) => {
     if (!publicClient || !address) {
       const tokenInfo = SUPPORTED_TOKENS[symbol];
@@ -38,22 +49,37 @@ export function useTokenList() {
     
     // For native ETH, handle differently
     if (symbol === 'ETH') {
-      // TODO: Implement ETH balance fetching
-      return {
-        name: tokenInfo.name,
-        symbol,
-        address: tokenAddress,
-        decimals: tokenInfo.decimals,
-        balance: '0', // This should be fetched from the wallet
-        price: 1850 // Mock price for ETH
-      } as Token;
+      try {
+        const ethBalance = await publicClient.getBalance({ 
+          address: address 
+        });
+        
+        return {
+          name: tokenInfo.name,
+          symbol,
+          address: tokenAddress,
+          decimals: tokenInfo.decimals,
+          balance: formatUnits(ethBalance, tokenInfo.decimals),
+          price: 1850 // Mock price for ETH
+        } as Token;
+      } catch (error) {
+        console.warn(`Error fetching ETH balance:`, error);
+        return {
+          name: tokenInfo.name,
+          symbol,
+          address: tokenAddress,
+          decimals: tokenInfo.decimals,
+          balance: '0',
+          price: 1850
+        } as Token;
+      }
     }
 
     try {
-      // Use the public client to read the contract
+      // Use the standard ERC20 ABI for all token contracts
       const balanceData = await publicClient.readContract({
-        address: tokenAddress as `0x${string}`,
-        abi: TokenABI,
+        address: tokenAddress,
+        abi: erc20BalanceOfAbi,
         functionName: 'balanceOf',
         args: [address],
       }) as bigint;

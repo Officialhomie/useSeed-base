@@ -747,15 +747,7 @@ export default function SpendSaveWallet() {
               
               <WalletDropdownBasename className="ss-dropdown-link ss-basename-link" />
               
-              <button 
-                className="ss-disconnect-button"
-                onClick={() => {
-                  // Handle disconnect
-                  console.log("Disconnect clicked");
-                }}
-              >
-                Disconnect
-              </button>
+              <WalletDropdownDisconnect className="ss-disconnect-button" />
             </div>
           </div>
         </WalletDropdown>

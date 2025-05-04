@@ -5,7 +5,6 @@ import { FiAlertCircle, FiArrowDown, FiExternalLink } from 'react-icons/fi';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import { calculateSavingsAmount, calculateActualSwapAmount } from '@/lib/utils/savingsCalculator';
 import { getSavingsTokenTypeName } from '@/lib/utils/savingsHelpers';
-import useGasEstimation from '@/lib/hooks/useGasEstimation';
 
 interface SwapConfirmationModalProps {
   isOpen: boolean;
@@ -23,6 +22,7 @@ interface SwapConfirmationModalProps {
   dcaEnabled?: boolean;
   dcaTargetToken?: string;
   usingFallbackGas?: boolean;
+  gasEstimate?: string;
 }
 
 const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
@@ -40,7 +40,8 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
   usingUniswapV4 = true,
   dcaEnabled = false,
   dcaTargetToken,
-  usingFallbackGas = false
+  usingFallbackGas = false,
+  gasEstimate = '0.001'
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { address } = useAccount();
@@ -56,14 +57,6 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
   // Calculate actual swap amount
   const actualSwapAmount = calculateActualSwapAmount(
     fromAmount,
-    strategy,
-    overridePercentage,
-    disableSavings
-  );
-
-  // Get gas estimation
-  const { gasInEth, isLoading: isLoadingGas } = useGasEstimation(
-    'swap',
     strategy,
     overridePercentage,
     disableSavings
@@ -144,7 +137,7 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Network Fee</span>
             <span className="text-white">
-              {isLoadingGas ? 'Calculating...' : `~${gasInEth} ETH`}
+              {isLoading ? 'Calculating...' : `~${gasEstimate} ETH`}
             </span>
           </div>
         </div>
@@ -215,9 +208,9 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={isLoading || isLoadingGas}
+            disabled={isLoading}
             className={`flex-1 py-3 rounded-xl font-bold ${
-              isLoading || isLoadingGas
+              isLoading
                 ? "bg-blue-600/50 text-white/50 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-500 text-white"
             } transition-colors flex items-center justify-center`}
