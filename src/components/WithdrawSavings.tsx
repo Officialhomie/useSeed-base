@@ -59,20 +59,20 @@ export default function WithdrawSavings({ onClose, savedTokens = [] }: {
     abi: DailySavingsABI,
     functionName: 'getDailySavingsStatus',
     args: [address, selectedToken as `0x${string}`],
-    enabled: !!address && !!selectedToken,
+    query: { enabled: !!address && !!selectedToken },
   });
   
   // Calculate penalties and timelock
   useEffect(() => {
     if (savingsStatus && amountToWithdraw && parseFloat(amountToWithdraw) > 0) {
-      // Check if goal has been reached
-      const goalReached = savingsStatus.goalAmount > 0 && 
-                           savingsStatus.currentAmount >= savingsStatus.goalAmount;
+      const status = savingsStatus as any;
+      const goalReached = status.goalAmount > 0 && 
+                           status.currentAmount >= status.goalAmount;
       
       if (!goalReached) {
         // Calculate penalty
-        const penaltyPercentage = savingsStatus.penaltyAmount ? 
-          Number(savingsStatus.penaltyAmount) / 100 : 5; // Default to 5%
+        const penaltyPercentage = status.penaltyAmount ? 
+          Number(status.penaltyAmount) / 100 : 5; // Default to 5%
         
         const withdrawAmount = parseFloat(amountToWithdraw);
         const calculatedPenalty = withdrawAmount * (penaltyPercentage / 100);
@@ -250,7 +250,7 @@ export default function WithdrawSavings({ onClose, savedTokens = [] }: {
               
               {penalty > 0 && (
                 <div className="flex justify-between mb-2">
-                  <span className="text-gray-400">Penalty ({penalty / amountToWithdraw * 100}%):</span>
+                  <span className="text-gray-400">Penalty ({((penalty / parseFloat(amountToWithdraw)) * 100).toFixed(2)}%):</span>
                   <span className="text-red-500">-{penalty.toFixed(6)} {getTokenSymbol(selectedToken)}</span>
                 </div>
               )}

@@ -485,7 +485,7 @@ export default function SavingsComponent() {
       // First, retrieve the tokens for which the user has savings plans
       const tokens = [ETH_ADDRESS];
       
-      let plans = [];
+      const plans: any[] = [];
       let totalSavedAmount = 0;
       
       for (const token of tokens) {

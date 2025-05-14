@@ -44,6 +44,22 @@ export const SUPPORTED_TOKENS = {
   DAI,
 } as const
 
+// Flat registry keyed by lowercase address → metadata
+export const TOKEN_REGISTRY: Record<string, { symbol: string; name: string; decimals: number }> =
+  Object.values(SUPPORTED_TOKENS).reduce((acc, t) => {
+    acc[t.address.toLowerCase()] = {
+      symbol: (t as any).symbol ?? 'UNK',
+      name: (t as any).name ?? 'Unknown',
+      decimals: t.decimals,
+    }
+    return acc
+  }, {} as Record<string, { symbol: string; name: string; decimals: number }>)
+
+// Describe token metadata from address
+export function describeToken(addr: string) {
+  return TOKEN_REGISTRY[addr.toLowerCase()] ?? { symbol: 'Unknown', name: 'Unknown Token', decimals: 18 }
+}
+
 // Helper to get token by symbol
 export function getTokenBySymbol(symbol: keyof typeof SUPPORTED_TOKENS) {
   return SUPPORTED_TOKENS[symbol]

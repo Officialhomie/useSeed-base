@@ -23,8 +23,25 @@ function setupDebugger() {
 // Call setup function
 setupDebugger();
 
+// Helper to build RPC url from env keys
+function buildAlchemyUrl(chain: 'base-sepolia' | 'base') {
+  const key = chain === 'base-sepolia'
+    ? process.env.NEXT_PUBLIC_ALCHEMY_BASE_SEPOLIA_KEY
+    : process.env.NEXT_PUBLIC_ALCHEMY_BASE_KEY
+  return key ? `https://base-${chain === 'base' ? 'mainnet' : 'sepolia'}.g.alchemy.com/v2/${key}` : null
+}
+
+function buildInfuraUrl(chain: 'base-sepolia' | 'base') {
+  const key = chain === 'base-sepolia'
+    ? process.env.NEXT_PUBLIC_INFURA_BASE_SEPOLIA_KEY
+    : process.env.NEXT_PUBLIC_INFURA_BASE_KEY
+  return key ? `https://${chain}.infura.io/v3/${key}` : null
+}
+
 // Configure multiple transports with fallback for Base Sepolia
 const baseSepoliaTransports = [
+  buildAlchemyUrl('base-sepolia') ? http(buildAlchemyUrl('base-sepolia')!, { timeout: 10000, fetchOptions: { mode: 'cors', cache: 'no-cache' } }) : null,
+  // buildInfuraUrl('base-sepolia') ? http(buildInfuraUrl('base-sepolia')!, { timeout: 10000, fetchOptions: { mode: 'cors', cache: 'no-cache' } }) : null,
   // Support for public gateway endpoints that have CORS enabled
   http('https://sepolia.base.org', { 
     timeout: 10000,
@@ -41,6 +58,14 @@ const baseSepoliaTransports = [
       cache: 'no-cache',
     }
   }),
+  http('https://lb.drpc.org/ogrpc?network=base-sepolia', {
+    timeout: 15000,
+    fetchOptions: { mode: 'cors', cache: 'no-cache' },
+  }),
+  http('https://base-sepolia.gateway.tenderly.co', {
+    timeout: 15000,
+    fetchOptions: { mode: 'cors', cache: 'no-cache' },
+  }),
   // Local proxy option if direct access fails
   http('/api/rpc/base-sepolia', { 
     timeout: 8000,
@@ -48,10 +73,12 @@ const baseSepoliaTransports = [
       mode: 'same-origin',
     }
   })
-];
+].filter(Boolean) as ReturnType<typeof http>[]; // remove nulls if no key provided
 
 // Main network transports (for future use)
 const baseMainnetTransports = [
+  buildAlchemyUrl('base') ? http(buildAlchemyUrl('base')!, { timeout: 10000, fetchOptions: { mode: 'cors', cache: 'no-cache' } }) : null,
+  buildInfuraUrl('base') ? http(buildInfuraUrl('base')!, { timeout: 10000, fetchOptions: { mode: 'cors', cache: 'no-cache' } }) : null,
   http('https://mainnet.base.org', {
     timeout: 10000,
     fetchOptions: {
@@ -66,7 +93,7 @@ const baseMainnetTransports = [
       cache: 'no-cache',
     }
   })
-];
+].filter(Boolean) as ReturnType<typeof http>[];
 
 // Create the Wagmi config with our transports
 export const config = createConfig({

@@ -1,19 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useState, useEffect, useCallback } from 'react';
+import { useAccount, useWaitForTransactionReceipt } from 'wagmi';
+import { useEthersSigner } from './useEthersSigner';
+import { getEthersProvider } from '../utils/ethersAdapter';
+import { UniswapV4Client } from '../uniswap/UniswapV4Client';
 import { parseUnits, formatUnits } from 'viem';
-import { CONTRACT_ADDRESSES } from '../contracts';
 import { SpendSaveStrategy } from './useSpendSaveStrategy';
 import { calculateSavingsAmount } from '../utils/savingsCalculator';
-import { getSwapQuote, executeSwap } from '../uniswap/swapRouter';
-import { SUPPORTED_TOKENS, SupportedTokenSymbol, getTokenBySymbol } from '../uniswap/tokens';
-import { calculateV4SwapGasLimit, getTransactionSizeCategory, calculateEthBuffer } from '../uniswap/UniswapV4Integration';
-import { CurrencyAmount, Token } from '@uniswap/sdk-core';
-
-// Define SwapRoute type inline
-interface SwapRoute {
-  quote: CurrencyAmount<Token>;
-  route: any;
-}
+import { SupportedTokenSymbol, getTokenBySymbol } from '../uniswap/tokens';
+import { calculateV4SwapGasLimit } from '../uniswap/UniswapV4Integration';
 
 // Transaction size thresholds in ETH
 const TX_SIZE_THRESHOLDS = {
@@ -55,6 +49,7 @@ export default function useSwapWithSavings(
   props: UseSwapWithSavingsProps | null
 ): SwapWithSavingsResult {
   const { address } = useAccount();
+  const { signer } = useEthersSigner();
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'preparing' | 'pending' | 'success' | 'error'>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [savedAmount, setSavedAmount] = useState('0');
@@ -63,8 +58,8 @@ export default function useSwapWithSavings(
   const [usingFallbackGas, setUsingFallbackGas] = useState(false);
   const [gasEstimate, setGasEstimate] = useState('0');
   const [sizeCategory, setSizeCategory] = useState<string | undefined>(undefined);
+  const [client, setClient] = useState<UniswapV4Client | null>(null);
   
-  const { writeContractAsync } = useWriteContract();
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({
     hash: transactionHash || undefined,
   });
@@ -103,7 +98,7 @@ export default function useSwapWithSavings(
 
   // Get quote using Uniswap SDK
   useEffect(() => {
-    const fetchQuote = async () => {
+    const fetchQuote = async (): Promise<void> => {
       if (!props || !address || !amount || parseFloat(amount) <= 0) return;
 
       try {
@@ -147,50 +142,63 @@ export default function useSwapWithSavings(
         }
         
         try {
-          const quoteAmountBigInt = BigInt(parseUnits(quoteAmount, fromTokenInfo.decimals));
-          
-          // Fetch quote with timeout
-          const quotePromise = getSwapQuote(fromToken, toToken, quoteAmountBigInt);
-          const timeoutPromise = new Promise<SwapRoute>((_, reject) => 
-            setTimeout(() => reject(new Error('Quote fetch timeout')), 3000)
-          );
-          
-          const result = await Promise.race([quotePromise, timeoutPromise]);
-          let quoteBigInt = BigInt(result.quote.quotient.toString());
-  
-          // Scale the result back if we used a minimum amount
+          const cli = await ensureClient();
+          const { quote } = await cli.getSwapQuote(fromToken, toToken, quoteAmount);
+
+          let rawOut = BigInt(quote.quotient.toString());
+
           if (needsScaling) {
             const scaleFactor = actualAmountFloat / TX_SIZE_THRESHOLDS.SMALL;
-            quoteBigInt = BigInt(Math.floor(Number(quoteBigInt) * scaleFactor));
+            rawOut = BigInt(Math.floor(Number(rawOut) * scaleFactor));
           }
-  
-          setEstimatedOutput(formatUnits(quoteBigInt, toTokenInfo.decimals));
+
+          setEstimatedOutput(formatUnits(rawOut, toTokenInfo.decimals));
         } catch (err) {
-          console.error('Error fetching quote:', err);
+          console.warn('SDK quote failed, using fallback approximation:', err);
           
           // Fall back to price approximation when quote fails
+          // This is an important fallback for when the SDK's pool creation fails with PRICE_BOUNDS
+          let fallbackEstimate = '0';
+
+          // Very robust fallback system for common pairs
           if (fromToken === 'ETH') {
             const APPROX_ETH_PRICE = 2500; // $2500 per ETH
             
             if (toToken === 'USDC') {
-              const estimatedUsdc = actualAmountFloat * APPROX_ETH_PRICE;
-              setEstimatedOutput(estimatedUsdc.toFixed(6));
+              fallbackEstimate = (actualAmountFloat * APPROX_ETH_PRICE).toFixed(6);
             } else if (toToken === 'WETH') {
-              setEstimatedOutput(actualSwapAmount);
+              fallbackEstimate = actualSwapAmount;
             } else if (toToken === 'DAI') {
-              const estimatedDai = actualAmountFloat * APPROX_ETH_PRICE;
-              setEstimatedOutput(estimatedDai.toFixed(18));
+              fallbackEstimate = (actualAmountFloat * APPROX_ETH_PRICE).toFixed(18);
             }
           } else if (toToken === 'ETH' || toToken === 'WETH') {
             // Reverse calculation for tokens to ETH/WETH
-            const APPROX_TOKEN_PRICES = {
+            const APPROX_TOKEN_PRICES: Record<string, number> = {
               'USDC': 1/2500, // 1 USDC = 1/2500 ETH
               'DAI': 1/2500   // 1 DAI = 1/2500 ETH
             };
             
-            const price = APPROX_TOKEN_PRICES[fromToken as 'USDC' | 'DAI'] || 0;
-            const estimatedEth = actualAmountFloat * price;
-            setEstimatedOutput(estimatedEth.toFixed(18));
+            const tokenPrice = APPROX_TOKEN_PRICES[fromToken as 'USDC' | 'DAI'];
+            if (tokenPrice) {
+              fallbackEstimate = (actualAmountFloat * tokenPrice).toFixed(18);
+            }
+          }
+          
+          // Fallback for USDC/DAI pair (1:1 rate)
+          if ((fromToken === 'USDC' && toToken === 'DAI') || (fromToken === 'DAI' && toToken === 'USDC')) {
+            // Both stablecoins trade roughly 1:1
+            fallbackEstimate = fromToken === 'USDC' 
+              ? actualAmountFloat.toFixed(18)  // USDC → DAI (18 decimals)
+              : actualAmountFloat.toFixed(6);  // DAI → USDC (6 decimals)
+          }
+
+          if (fallbackEstimate !== '0') {
+            console.info(`Using fallback price estimate for ${fromToken}->${toToken}: ${fallbackEstimate}`);
+            setEstimatedOutput(fallbackEstimate);
+          } else {
+            // Last resort - just use 1:1 conversion with adjusted decimals
+            console.warn(`No specific fallback for ${fromToken}->${toToken}, using 1:1 rate`);
+            setEstimatedOutput(actualSwapAmount);
           }
           
           // Don't set error for fallback prices to avoid UI disruption
@@ -210,6 +218,52 @@ export default function useSwapWithSavings(
     fetchQuote();
   }, [address, fromToken, toToken, actualSwapAmount, amount, props]);
 
+  // Internal helper to lazily instantiate and cache a UniswapV4Client instance
+  const ensureClient = useCallback(async (): Promise<UniswapV4Client> => {
+    if (client) {
+      if (!client.userAddress && address) {
+        try {
+          await client.init(address);
+        } catch (_) {}
+      }
+      return client;
+    }
+
+    // Always build provider from wagmi – signer may be null for readonly fetchQuote
+    const provider = await getEthersProvider();
+
+    const newClient = new UniswapV4Client(provider, signer ?? undefined);
+    
+    // Try to initialize with address first (preferred method to avoid signer.getAddress call)
+    if (address) {
+      try {
+        await newClient.init(address);
+      } catch (err) {
+        console.error('Error initializing client with address:', err);
+        // If address init fails and we have a signer, try that as fallback
+        if (signer) {
+          try {
+            await newClient.init();
+          } catch (signerErr) {
+            console.error('Error initializing client with signer:', signerErr);
+            // Continue without initialization - some functionality will be limited
+          }
+        }
+      }
+    }
+    setClient(newClient);
+    return newClient;
+  }, [client, signer, address]);
+
+  // Prevent using identical token pair – early-exit with error
+  useEffect(() => {
+    if (props && fromToken === toToken) {
+      setError(new Error('From and To tokens must be different'));
+    } else {
+      setError(null);
+    }
+  }, [props, fromToken, toToken]);
+
   // Execute the swap
   const executeSwapFunction = async () => {
     if (!props || !address || !amount || parseFloat(amount) <= 0) {
@@ -225,41 +279,11 @@ export default function useSwapWithSavings(
         throw new Error('Invalid from token');
       }
 
-      // Parse amounts
-      const amountInBigInt = BigInt(parseUnits(actualSwapAmount, fromTokenInfo.decimals));
+      // Parse ETH value to send (only for native ETH swaps)
       const valueToSend = fromToken === 'ETH' ? BigInt(parseUnits(amount, 18)) : BigInt(0);
       
-      // Get swap route - with error handling
-      let route;
-      try {
-        const quotePromise = getSwapQuote(fromToken, toToken, amountInBigInt);
-        const timeoutPromise = new Promise<SwapRoute>((_, reject) => 
-          setTimeout(() => reject(new Error('Quote fetch timeout')), 3000)
-        );
-        
-        route = await Promise.race([quotePromise, timeoutPromise]).then(result => result.route);
-      } catch (error) {
-        console.warn('Quote fetch failed, using fallback route', error);
-        route = null;
-      }
-
-      // Get swap parameters
-      let swapParams;
-      try {
-        swapParams = await executeSwap(
-          {
-            fromToken,
-            toToken,
-            amount: amountInBigInt,
-            slippageTolerance: slippage,
-            recipient: address
-          },
-          route
-        );
-      } catch (error) {
-        console.warn('Failed to get swap parameters', error);
-        throw new Error('Failed to prepare swap transaction');
-      }
+      // Ensure client first
+      const cliInstance = await ensureClient();
 
       // Calculate gas limit using the improved v4 function
       const { gasLimit, usingFallback, sizeCategory: txSizeCategory } = calculateV4SwapGasLimit({
@@ -281,27 +305,18 @@ export default function useSwapWithSavings(
       setGasEstimate(gasEstimateEth);
       setSizeCategory(txSizeCategory);
 
-      // Execute the swap
-      const txHash = await writeContractAsync({
-        address: CONTRACT_ADDRESSES.UNISWAP_BASE_SEPOLIA_UNIVERSAL_ROUTER,
-        abi: [
-          {
-            name: 'execute',
-            type: 'function',
-            stateMutability: 'payable',
-            inputs: [
-              { name: 'commands', type: 'bytes' },
-              { name: 'inputs', type: 'bytes[]' }
-            ],
-            outputs: []
-          }
-        ],
-        functionName: 'execute',
-        args: [swapParams.commands, swapParams.inputs],
-        value: valueToSend,
-        gas: gasLimit
+      // Execute the swap via UniswapV4Client which returns a TransactionResponse
+      const slippageBps = Math.floor(slippage * 100); // convert pct to basis points
+      const txResponse = await cliInstance.executeSwap({
+        fromToken,
+        toToken,
+        amountRaw: actualSwapAmount,
+        slippageBps,
+        disableSavings,
+        hookFlags: disableSavings ? { before: false, after: false, delta: false } : undefined,
       });
 
+      const txHash = txResponse.hash as `0x${string}`;
       setTransactionHash(txHash);
       setExecutionStatus('pending');
       setSavedAmount(calculatedSavingsAmount);

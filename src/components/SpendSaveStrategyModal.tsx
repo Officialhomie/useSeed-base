@@ -24,28 +24,51 @@ interface SpendSaveStrategyModalProps {
   onClose: () => void;
   onComplete?: () => void;
   isFirstTime?: boolean;
+  /**
+   * Provide a strategy object to control the modal externally (optional).
+   */
+  strategy?: any;
+  /**
+   * Callback fired when the user updates the strategy via the form (only called if `strategy` is provided).
+   */
+  onStrategyChange?: (newStrategy: any) => void;
+  /**
+   * Fallback strategy to use when uncontrolled and no existing on-chain strategy present.
+   */
+  initialStrategy?: any;
+  /**
+   * Callback fired when the existing on-chain strategy has been fetched and normalised.
+   */
+  onStrategySaved?: (s: any) => void;
 }
 
 const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({ 
   isOpen, 
   onClose, 
   onComplete,
-  isFirstTime = false
+  isFirstTime = false,
+  initialStrategy = null,
+  strategy: controlledStrategy,
+  onStrategyChange,
+  onStrategySaved
 }) => {
   const { address } = useAccount();
-  const [strategy, setStrategy] = useState({
-    percentage: 10,
-    autoIncrement: 0,
-    maxPercentage: 25,
-    roundUpSavings: true,
-    savingsTokenType: SavingsTokenType.INPUT,
-    specificToken: CONTRACT_ADDRESSES.ETH,
-    enableDCA: false,
-    dcaTargetToken: CONTRACT_ADDRESSES.ETH
-  });
-  
   const [step, setStep] = useState(isFirstTime ? 0 : 1);
   const [loading, setLoading] = useState(false);
+
+  const [strategy, setStrategyState] = useState<any>(
+    controlledStrategy ??
+    initialStrategy ?? {
+      percentage: 10,
+      autoIncrement: 0,
+      maxPercentage: 25,
+      roundUpSavings: true,
+      savingsTokenType: SavingsTokenType.INPUT,
+      specificToken: CONTRACT_ADDRESSES.ETH,
+      enableDCA: false,
+      dcaTargetToken: CONTRACT_ADDRESSES.ETH,
+    },
+  );
 
   // Get existing strategy if available
   const { data: existingStrategy, isLoading: isLoadingStrategy } = useReadContract({
@@ -83,7 +106,7 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
   // Initialize strategy from existing data if available
   useEffect(() => {
     if (existingStrategy && Array.isArray(existingStrategy)) {
-      setStrategy({
+      onStrategySaved?.({
         percentage: Number(existingStrategy[0]) / 100, // Convert from basis points (e.g., 1000 = 10%)
         autoIncrement: Number(existingStrategy[1]) / 100, 
         maxPercentage: Number(existingStrategy[2]) / 100,
@@ -94,7 +117,20 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
         dcaTargetToken: CONTRACT_ADDRESSES.ETH // We'll need to fetch this separately
       });
     }
-  }, [existingStrategy]);
+  }, [existingStrategy, onStrategySaved]);
+
+  // Allow controlled usage – when `strategy` prop changes update internal state
+  useEffect(() => {
+    if (controlledStrategy) {
+      setStrategyState(controlledStrategy)
+    }
+  }, [controlledStrategy])
+
+  // Wrapper to update state and propagate to parent if using controlled component pattern
+  const setStrategy = (updater: any) => {
+    setStrategyState(updater)
+    onStrategyChange?.(typeof updater === 'function' ? updater(strategy) : updater)
+  };
 
   // Handle status changes
   useEffect(() => {

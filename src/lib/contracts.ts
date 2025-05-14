@@ -6,16 +6,16 @@ import { spendPermissionManagerAbi, spendPermissionManagerAddress } from "./abi/
 // Contract addresses
 export const CONTRACT_ADDRESSES = {
   SPEND_PERMISSION_MANAGER: spendPermissionManagerAddress as Address,
-  YIELD_MODULE: "0x7490C06A3aa9f67cF0A3C60c16d8C1c9cDb4d80A" as Address,
-  DCA: "0xaa6e63E70C8c267145953c505E166193DC775e9e" as Address,
-  SAVING: "0x80B797A3a3d75f2bbeEA0ba4672c1de2D95B9c07" as Address,
-  DAILY_SAVINGS: "0x134f9eF6441eF08d10545106ca9c5058e4AED695" as Address,
-  SPEND_SAVE_STORAGE: "0x130Acdd4d63dDaBc3c834e059Fcb6467E9bAb88b" as Address,
-  SPEND_SAVE_HOOK: "0x11b946B9852c52d2DBAEc4de0Bd4cAA1438880cC" as Address,
-  SAVING_STRATEGY: "0x4f477a464aBE8d6Faf2F94F55AEab5B7be6A1D1a" as Address,
+  YIELD_MODULE: "0x8f6525f62BD55B6B9Bb77F2344F2919D60c33fa9" as Address,
+  DCA: "0x5142ffbFEC05CEA2b59d13d4502bfCb45403A519" as Address,
+  SAVING: "0x0bb069A405ACAd5050eC67C86F552eBd8D8a1825" as Address,
+  DAILY_SAVINGS: "0xf8309bd20df4Ce54029e546ec4a6316f204a3c5f" as Address,
+  SPEND_SAVE_STORAGE: "0xF45FA81280373EFc5B2843386478733589e421Aa" as Address,
+  SPEND_SAVE_HOOK: "0xB9D7c1F9374379E4BAaFb8C69262cf75213A80cC" as Address,
+  SAVING_STRATEGY: "0x27C7fe9067eF54212CC3FcEA6A9A042fDAb22e08" as Address,
   TREASURY: "0x9aC2d5a0A0E88D459Ecfb68Bcbb94DFD7cdF1f09" as Address,
-  SLIPPAGE_CONTROL: "0x7ddc43c892f7662748426F3f9865495AA3364bC5" as Address,
-  TOKEN: "0x5E35aE4Ae9D32a9742022E4e38f69A140a9a339f" as Address,
+  SLIPPAGE_CONTROL: "0x257DEBe1424EE59624dF003231082fb140338Fa5" as Address,
+  TOKEN: "0x08CBAF1e6b949AaE6407AbF845D13533cde62EF0" as Address,
 
   UNISWAP_BASE_SEPOLIA_POOL_MANAGER: "0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408" as Address,
   UNISWAP_BASE_SEPOLIA_UNIVERSAL_ROUTER: "0x492e6456d9528771018deb9e87ef7750ef184104" as Address,
@@ -30,6 +30,7 @@ export const CONTRACT_ADDRESSES = {
 import yieldModuleAbi from "../ABI/YieldModule.json";
 import dcaAbi from "../ABI/DCA.json";
 import savingAbi from "../ABI/Saving.json";
+import savingStrategyAbi from "../ABI/SavingStrategy.json";
 import dailySavingsAbi from "../ABI/DailySavings.json";
 import spendSaveStorageAbi from "../ABI/SpenSaveStorage.json";
 import spendSaveHookAbi from "../ABI/SpendSaveHook.json";
@@ -93,6 +94,11 @@ export const getContracts = (chain: Chain = baseSepolia) => {
     spendSaveHook: getContractInstance(
       CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
       spendSaveHookAbi,
+      chain
+    ),
+    savingStrategy: getContractInstance(
+      CONTRACT_ADDRESSES.SAVING_STRATEGY,
+      savingStrategyAbi,
       chain
     ),
   };

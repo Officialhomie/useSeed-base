@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAccount, useReadContract, useReadContracts } from 'wagmi';
-import { Address, formatUnits, parseAbi, Abi } from 'viem';
+import { useAccount, useReadContract, usePublicClient } from 'wagmi';
+import { Address, formatUnits, Abi } from 'viem';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowUp, FiBarChart2, FiDollarSign, FiTarget, FiClock, FiAward, FiAlertCircle } from 'react-icons/fi';
@@ -54,6 +54,9 @@ export default function SavingsOverview() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [showEmptyState, setShowEmptyState] = useState(false);
 
+  // Access Viem public client for direct contract reads (non-hook).
+  const publicClient = usePublicClient();
+
   // Get token symbol from address
   const getTokenSymbol = useCallback((tokenAddress: Address): string => {
     if (tokenAddress === CONTRACT_ADDRESSES.ETH) return 'ETH';
@@ -91,26 +94,29 @@ export default function SavingsOverview() {
       return;
     }
 
-    // Use the readContracts result
-    const { data: balanceResults } = useReadContracts({
-      contracts: tokens.map(token => ({
-        address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
-        abi: SPEND_SAVE_STORAGE_ABI as Abi,
-        functionName: 'getUserTotalSaved',
-        args: [address, token],
-      })),
-    });
+    // Fetch balances using the viem public client directly (avoids React Hook restrictions).
+    if (!publicClient) return;
+
+    const balanceResults = await Promise.all(
+      tokens.map((token) =>
+        publicClient.readContract({
+          address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
+          abi: SPEND_SAVE_STORAGE_ABI as Abi,
+          functionName: 'getUserTotalSaved',
+          args: [address as Address, token],
+        })
+      )
+    );
 
     if (balanceResults) {
       const balances: {[key: string]: string} = {};
       let totalSaved = 0;
 
       tokens.forEach((token, index) => {
-        if (balanceResults[index].status === 'success' && balanceResults[index].result) {
-          const balance = formatUnits(balanceResults[index].result as bigint, 18);
+        const raw = balanceResults[index] as bigint | undefined;
+        if (raw !== undefined) {
+          const balance = formatUnits(raw, 18);
           balances[token] = balance;
-          
-          // For MVP, we're not using actual price API, just counting token amounts
           totalSaved += parseFloat(balance);
         } else {
           balances[token] = '0';
@@ -123,7 +129,7 @@ export default function SavingsOverview() {
     }
     
     setIsLoading(false);
-  }, [savedTokensData, address, isConnected]);
+  }, [savedTokensData, address, isConnected, publicClient]);
 
   // Process savings goal data
   useEffect(() => {

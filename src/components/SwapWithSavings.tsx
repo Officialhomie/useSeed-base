@@ -9,12 +9,13 @@ import useDCAManagement from '@/lib/hooks/useDCAManagement';
 import useSpendSaveStrategy from '@/lib/hooks/useSpendSaveStrategy';
 import { useTokenList, Token } from '@/lib/hooks/useTokenList';
 import { useTokenBalances } from '@/lib/hooks/useTokenBalances';
-import { FiSettings, FiArrowDown, FiInfo, FiExternalLink } from 'react-icons/fi';
+import { FiSettings, FiArrowDown, FiInfo, FiExternalLink, FiTarget } from 'react-icons/fi';
 import SwapConfirmationModal from './SwapConfirmationModal';
 import SpendSaveEventListeners from './SpendSaveEventListeners';
 import { useNotification } from './NotificationManager';
 import TokenSelector from './TokenSelector';
 import SwapWithSavingsGasInfo from './SwapWithSavingsGasInfo';
+import SpendSaveStrategyModal from './SpendSaveStrategyModal';
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
@@ -33,6 +34,7 @@ export default function SwapWithSavings() {
   const [showSettings, setShowSettings] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [slippage, setSlippage] = useState("0.5");
+  const [showStrategyModal, setShowStrategyModal] = useState(false);
   
   // Savings customization
   const [disableSavingsForThisSwap, setDisableSavingsForThisSwap] = useState(false);
@@ -324,12 +326,22 @@ export default function SwapWithSavings() {
       <div className="w-full max-w-md mx-auto bg-gray-900 rounded-2xl shadow-lg p-6 border border-gray-800">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-white">Swap</h2>
-          <button 
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
-          >
-            <FiSettings className="text-gray-400" />
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowStrategyModal(true)}
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+              title="Savings Strategy"
+            >
+              <FiTarget className="text-green-400" />
+            </button>
+            <button 
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+              title="Transaction Settings"
+            >
+              <FiSettings className="text-gray-400" />
+            </button>
+          </div>
         </div>
         
         {/* Settings panel */}
@@ -623,6 +635,18 @@ export default function SwapWithSavings() {
         onSavingsProcessed={handleSavingsProcessed}
         onDCAQueued={handleDCAQueued}
       />
+      
+      {/* Strategy Modal */}
+      {showStrategyModal && (
+        <SpendSaveStrategyModal
+          isOpen={showStrategyModal}
+          onClose={() => setShowStrategyModal(false)}
+          strategy={strategy}
+          onStrategyChange={(newStrategy) => {
+            // Handle strategy change
+          }}
+        />
+      )}
     </>
   );
 } 

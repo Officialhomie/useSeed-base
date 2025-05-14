@@ -40,7 +40,7 @@ export default function useSavingsData(tokenAddress?: Address) {
     ],
     functionName: 'getUserTotalSaved',
     args: address && tokenAddress ? [address, tokenAddress] : undefined,
-    enabled: !!address && !!tokenAddress,
+    query: { enabled: !!address && !!tokenAddress },
   });
 
   // Read savings goal
@@ -60,7 +60,7 @@ export default function useSavingsData(tokenAddress?: Address) {
     ],
     functionName: 'getUserSavingsGoal',
     args: address ? [address] : undefined,
-    enabled: !!address,
+    query: { enabled: !!address },
   });
 
   // Read all saved tokens for the user
@@ -77,7 +77,7 @@ export default function useSavingsData(tokenAddress?: Address) {
     ],
     functionName: 'getUserSavedTokens',
     args: address ? [address] : undefined,
-    enabled: !!address,
+    query: { enabled: !!address },
   });
 
   // Process the data and update the state

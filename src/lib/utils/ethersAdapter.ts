@@ -7,7 +7,7 @@ import { config } from '../../../wagmi'
 /**
  * Convert a wagmi PublicClient to an ethers.js Provider.
  */
-export function publicClientToProvider(publicClient: PublicClient): ethers.providers.JsonRpcProvider | ethers.providers.Web3Provider {
+export function publicClientToProvider(publicClient: PublicClient): ethers.providers.Provider {
   const { chain, transport } = publicClient as any
   const network = {
     chainId: chain!.id,
@@ -15,12 +15,19 @@ export function publicClientToProvider(publicClient: PublicClient): ethers.provi
     ensAddress: chain!.contracts?.ensRegistry?.address,
   }
 
+  // 1. wagmi fallback transport → use all child transports to make an ethers FallbackProvider
+  if ((transport as any)?.transports) {
+    const urls = (transport as any).transports.map((t: any) => t.url)
+    const providers = urls.map((u: string) => new ethers.providers.JsonRpcProvider(u, network))
+    return new ethers.providers.FallbackProvider(providers, 1) // 1-of quorum
+  }
+
+  // 2. single HTTP transport
   if (transport.type === 'http') {
-    // JSON-RPC endpoint
     return new ethers.providers.JsonRpcProvider(transport.url, network)
   }
 
-  // Fallback to window.ethereum (Coinbase Wallet injects provider here)
+  // 3. injected provider
   if (typeof window !== 'undefined' && (window as any).ethereum) {
     return new ethers.providers.Web3Provider((window as any).ethereum, network)
   }

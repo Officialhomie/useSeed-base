@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, usePublicClient } from 'wagmi';
 import { Address, parseUnits, formatUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { createPoolKey } from '../uniswap/UniswapV4Integration';
@@ -36,6 +36,7 @@ interface UseDCAManagementResult {
 
 export default function useDCAManagement(): UseDCAManagementResult {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -406,11 +407,10 @@ export default function useDCAManagement(): UseDCAManagementResult {
     }
   };
 
-  // Helper function to wait for transaction
+  // Helper function to wait for transaction confirmation using the viem public client.
   const waitForTransaction = async (hash: `0x${string}`) => {
-    await useWaitForTransactionReceipt({
-      hash
-    });
+    if (!publicClient) return;
+    await publicClient.waitForTransactionReceipt({ hash });
   };
 
   return {

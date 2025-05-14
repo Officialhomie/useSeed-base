@@ -5,6 +5,7 @@ import { FiAlertCircle, FiArrowDown, FiExternalLink } from 'react-icons/fi';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import { calculateSavingsAmount, calculateActualSwapAmount } from '@/lib/utils/savingsCalculator';
 import { getSavingsTokenTypeName } from '@/lib/utils/savingsHelpers';
+import { describeToken } from '@/lib/uniswap/tokens';
 
 interface SwapConfirmationModalProps {
   isOpen: boolean;
@@ -153,7 +154,7 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
                   ? `${overridePercentage !== null ? overridePercentage : (strategy.currentPercentage / 100)}% of your input (${savingsAmount} ${fromToken}) will be saved.` 
                   : strategy.savingsTokenType === 1 
                     ? `${overridePercentage !== null ? overridePercentage : (strategy.currentPercentage / 100)}% of your output will be saved after swap.`
-                    : `${overridePercentage !== null ? overridePercentage : (strategy.currentPercentage / 100)}% will be converted to ${getSavingsTokenTypeName(strategy.savingsTokenType, strategy.specificSavingsToken)}.`
+                    : `${overridePercentage !== null ? overridePercentage : (strategy.currentPercentage / 100)}% will be converted to ${describeToken(strategy.specificSavingsToken).symbol}.`
                 }
               </p>
               

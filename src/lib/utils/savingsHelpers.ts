@@ -1,12 +1,14 @@
 import { Address } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
+import { describeToken } from '../uniswap/tokens';
 
 // Get token symbol from address
 export function getTokenSymbolFromAddress(tokenAddress: Address): string {
   if (tokenAddress === CONTRACT_ADDRESSES.ETH) return 'ETH';
   if (tokenAddress === CONTRACT_ADDRESSES.USDC) return 'USDC';
   if (tokenAddress === CONTRACT_ADDRESSES.WETH) return 'WETH';
-  return 'Unknown Token';
+  // fallback: look in registry
+  return describeToken(tokenAddress).symbol;
 }
 
 // Get the name of the savings token type
