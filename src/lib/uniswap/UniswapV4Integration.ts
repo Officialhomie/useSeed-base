@@ -1,5 +1,6 @@
 import { Address, encodeAbiParameters, parseUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
+import JSBI from 'jsbi';
 
 /**
  * Interface for swap parameters
@@ -53,6 +54,10 @@ export const TRANSACTION_SIZE_GAS = {
     withDca: BigInt(550000),
   },
 };
+
+// Constants for min and max sqrt price ratios
+const MIN_SQRT_RATIO = JSBI.BigInt('4295128739'); // Same as TickMath.MIN_SQRT_RATIO
+const MAX_SQRT_RATIO = JSBI.BigInt('1461446703485210103287273052203988822378723970342'); // Same as TickMath.MAX_SQRT_RATIO
 
 /**
  * Encode hook data for Uniswap V4 swap with SpendSave hook
@@ -211,4 +216,34 @@ export function calculateEthBuffer(
   const maxBuffer = ethBalance * 0.2; // Max 20% of balance
   
   return Math.min(withSafetyMargin, maxBuffer);
+}
+
+/**
+ * Derive a sqrtPriceLimitX96 based on user slippage percentage.
+ * Uniswap V4 treats a limit of 0 as "no limit", which is dangerous for
+ * production.  This utility gives a tight but safe bound around the current
+ * pool price so that excessive price movement reverts instead of executing.
+ *
+ * @param zeroForOne  Direction of the swap – true  ➜ token0 → token1
+ * @param slippagePct Percentage (e.g. 0.5 for 0.5 %)
+ */
+export function getSqrtPriceLimit(zeroForOne: boolean, slippagePct: number): bigint {
+  // Guard against bad input
+  if (slippagePct <= 0) {
+    // 0 % ⇒ use the extreme boundary the protocol allows (+/- 1 to avoid exact boundary)
+    return zeroForOne
+      ? BigInt(MIN_SQRT_RATIO.toString()) + BigInt(1)
+      : BigInt(MAX_SQRT_RATIO.toString()) - BigInt(1);
+  }
+
+  // Convert constants (JSBI) -> bigint for arithmetic convenience
+  const MIN = BigInt(MIN_SQRT_RATIO.toString()) + BigInt(1);
+  const MAX = BigInt(MAX_SQRT_RATIO.toString()) - BigInt(1);
+
+  // slippagePct is expressed as N %, we convert to parts-per-1e6 to keep precision
+  const slipPartsPerMillion = Math.round(slippagePct * 10_000); // 1 % = 10000 ppm
+
+  const delta = (MAX - MIN) * BigInt(slipPartsPerMillion) / BigInt(1000000);
+
+  return zeroForOne ? MIN + delta : MAX - delta;
 } 

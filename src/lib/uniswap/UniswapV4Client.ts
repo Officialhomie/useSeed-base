@@ -20,6 +20,7 @@ import {
   SupportedTokenSymbol,
 } from './tokens'
 import { encodeSpendSaveHookData } from './UniswapV4Integration'
+import { getSqrtPriceLimit } from './UniswapV4Integration'
 import type { HookFlags } from './types'
 
 export interface QuoteResult {
@@ -229,6 +230,9 @@ export class UniswapV4Client {
       ? { before: false, after: false, delta: false }
       : { before: hookFlags?.before ?? true, after: hookFlags?.after ?? true, delta: hookFlags?.delta ?? true }
 
+    const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
+    const sqrtLimit = getSqrtPriceLimit(zeroForOne, slippageBps / 100)
+
     const planner = new V4Planner()
     // @ts-expect-error – swapCallParameters is part of experimental V4Planner typings
     const { to, data, value } = planner.swapCallParameters({
@@ -237,6 +241,7 @@ export class UniswapV4Client {
       amount: amountIn.quotient.toString(),
       slippageTolerance: new Percent(slippageBps, 10_000),
       deadline: Math.floor(Date.now() / 1000) + deadlineSeconds,
+      sqrtPriceLimitX96: sqrtLimit,
       hookOptions: {
         beforeSwap: finalHookFlags.before,
         afterSwap: finalHookFlags.after,

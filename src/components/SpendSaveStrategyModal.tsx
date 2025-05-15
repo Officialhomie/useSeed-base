@@ -56,9 +56,9 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
   const [step, setStep] = useState(isFirstTime ? 0 : 1);
   const [loading, setLoading] = useState(false);
 
-  const [strategy, setStrategyState] = useState<any>(
-    controlledStrategy ??
-    initialStrategy ?? {
+  const [strategy, setStrategyState] = useState<any>(() => {
+    // Create the initial state with validated values
+    const initialState = controlledStrategy ?? initialStrategy ?? {
       percentage: 10,
       autoIncrement: 0,
       maxPercentage: 25,
@@ -67,8 +67,36 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
       specificToken: CONTRACT_ADDRESSES.ETH,
       enableDCA: false,
       dcaTargetToken: CONTRACT_ADDRESSES.ETH,
-    },
-  );
+    };
+    
+    // Ensure all numeric values are valid
+    return {
+      ...initialState,
+      percentage: Number.isNaN(initialState.percentage) ? 10 : initialState.percentage,
+      autoIncrement: Number.isNaN(initialState.autoIncrement) ? 0 : initialState.autoIncrement,
+      maxPercentage: Number.isNaN(initialState.maxPercentage) ? 25 : initialState.maxPercentage,
+    };
+  });
+
+  // Add validation to ensure strategy values are always numbers
+  useEffect(() => {
+    if (strategy) {
+      // Validate and correct any NaN values
+      const validatedStrategy = {
+        ...strategy,
+        percentage: Number.isNaN(strategy.percentage) ? 10 : strategy.percentage,
+        autoIncrement: Number.isNaN(strategy.autoIncrement) ? 0 : strategy.autoIncrement,
+        maxPercentage: Number.isNaN(strategy.maxPercentage) ? 25 : strategy.maxPercentage,
+      };
+      
+      // Update if there were any corrections
+      if (validatedStrategy.percentage !== strategy.percentage ||
+          validatedStrategy.autoIncrement !== strategy.autoIncrement ||
+          validatedStrategy.maxPercentage !== strategy.maxPercentage) {
+        setStrategyState(validatedStrategy);
+      }
+    }
+  }, [strategy]);
 
   // Get existing strategy if available
   const { data: existingStrategy, isLoading: isLoadingStrategy } = useReadContract({
@@ -106,16 +134,36 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
   // Initialize strategy from existing data if available
   useEffect(() => {
     if (existingStrategy && Array.isArray(existingStrategy)) {
-      onStrategySaved?.({
-        percentage: Number(existingStrategy[0]) / 100, // Convert from basis points (e.g., 1000 = 10%)
-        autoIncrement: Number(existingStrategy[1]) / 100, 
-        maxPercentage: Number(existingStrategy[2]) / 100,
-        roundUpSavings: existingStrategy[4],
-        savingsTokenType: Number(existingStrategy[6]),
-        specificToken: existingStrategy[7] as Address || CONTRACT_ADDRESSES.ETH,
-        enableDCA: existingStrategy[5],
-        dcaTargetToken: CONTRACT_ADDRESSES.ETH // We'll need to fetch this separately
-      });
+      try {
+        // Get values from strategy and ensure they're valid numbers
+        const currentPercentage = Number(existingStrategy[0]) / 100; // Convert from basis points
+        const autoIncrement = Number(existingStrategy[1]) / 100;
+        const maxPercentage = Number(existingStrategy[2]) / 100;
+        
+        onStrategySaved?.({
+          percentage: Number.isNaN(currentPercentage) ? 10 : currentPercentage,
+          autoIncrement: Number.isNaN(autoIncrement) ? 0 : autoIncrement, 
+          maxPercentage: Number.isNaN(maxPercentage) ? 25 : maxPercentage,
+          roundUpSavings: existingStrategy[4],
+          savingsTokenType: Number(existingStrategy[6]),
+          specificToken: existingStrategy[7] as Address || CONTRACT_ADDRESSES.ETH,
+          enableDCA: existingStrategy[5],
+          dcaTargetToken: CONTRACT_ADDRESSES.ETH // We'll need to fetch this separately
+        });
+      } catch (error) {
+        console.error("Error processing existing strategy:", error);
+        // Fallback to default values on error
+        onStrategySaved?.({
+          percentage: 10,
+          autoIncrement: 0,
+          maxPercentage: 25,
+          roundUpSavings: true,
+          savingsTokenType: 0,
+          specificToken: CONTRACT_ADDRESSES.ETH,
+          enableDCA: false,
+          dcaTargetToken: CONTRACT_ADDRESSES.ETH
+        });
+      }
     }
   }, [existingStrategy, onStrategySaved]);
 
@@ -148,10 +196,36 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
     if (!address) return;
     
     try {
+      // Helper function to ensure we never pass NaN to BigInt
+      const safeBigInt = (value: number): bigint => {
+        // If value is NaN or not an integer, use a default value
+        if (Number.isNaN(value) || !Number.isInteger(value)) {
+          console.warn(`Attempted to convert invalid value to BigInt: ${value}. Using default.`);
+          return BigInt(0);
+        }
+        return BigInt(value);
+      };
+
       // Convert percentage values to basis points for contract (e.g., 10% becomes 1000)
-      const percentageBasisPoints = Math.round(strategy.percentage * 100);
-      const autoIncrementBasisPoints = Math.round(strategy.autoIncrement * 100);
-      const maxPercentageBasisPoints = Math.round(strategy.maxPercentage * 100);
+      // Add validation to ensure values are numbers and provide fallbacks for NaN
+      const percentageBasisPoints = Math.round(
+        Number.isNaN(strategy.percentage) ? 10 * 100 : strategy.percentage * 100
+      );
+      const autoIncrementBasisPoints = Math.round(
+        Number.isNaN(strategy.autoIncrement) ? 0 : strategy.autoIncrement * 100
+      );
+      const maxPercentageBasisPoints = Math.round(
+        Number.isNaN(strategy.maxPercentage) ? 
+        (Number.isNaN(strategy.percentage) ? 25 : strategy.percentage * 2) * 100 : 
+        strategy.maxPercentage * 100
+      );
+
+      // Log values for debugging
+      console.log("Strategy values being sent to contract:", {
+        percentage: percentageBasisPoints,
+        autoIncrement: autoIncrementBasisPoints,
+        maxPercentage: maxPercentageBasisPoints
+      });
 
       // Call contract to set saving strategy
       writeContract({
@@ -176,9 +250,9 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
         functionName: 'setSavingStrategy',
         args: [
           address,
-          BigInt(percentageBasisPoints),
-          BigInt(autoIncrementBasisPoints),
-          BigInt(maxPercentageBasisPoints),
+          safeBigInt(percentageBasisPoints),
+          safeBigInt(autoIncrementBasisPoints),
+          safeBigInt(maxPercentageBasisPoints),
           strategy.roundUpSavings,
           Number(strategy.savingsTokenType),
           strategy.savingsTokenType === SavingsTokenType.SPECIFIC 
@@ -296,7 +370,11 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
                     min="1"
                     max="50"
                     value={strategy.percentage}
-                    onChange={(e) => setStrategy({...strategy, percentage: parseInt(e.target.value)})}
+                    onChange={(e) => {
+                      // Convert to number and validate
+                      const value = parseInt(e.target.value);
+                      setStrategy({...strategy, percentage: isNaN(value) ? 1 : value});
+                    }}
                     className="w-full"
                   />
                   <span className="ml-2 text-white font-medium w-12 text-right">{strategy.percentage}%</span>
@@ -330,7 +408,11 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
                         max="2"
                         step="0.1"
                         value={strategy.autoIncrement}
-                        onChange={(e) => setStrategy({...strategy, autoIncrement: parseFloat(e.target.value)})}
+                        onChange={(e) => {
+                          // Convert to float and validate
+                          const value = parseFloat(e.target.value);
+                          setStrategy({...strategy, autoIncrement: isNaN(value) ? 0.1 : value});
+                        }}
                         className="w-full"
                       />
                       <span className="ml-2 text-white font-medium w-12 text-right">{strategy.autoIncrement}%</span>
@@ -346,7 +428,11 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
                           min={strategy.percentage}
                           max="50"
                           value={strategy.maxPercentage}
-                          onChange={(e) => setStrategy({...strategy, maxPercentage: parseInt(e.target.value)})}
+                          onChange={(e) => {
+                            // Convert to number and validate
+                            const value = parseInt(e.target.value);
+                            setStrategy({...strategy, maxPercentage: isNaN(value) ? 10 : value});
+                          }}
                           className="w-full"
                         />
                         <span className="ml-2 text-white font-medium w-12 text-right">{strategy.maxPercentage}%</span>
