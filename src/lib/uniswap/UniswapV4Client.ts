@@ -42,7 +42,7 @@ export class UniswapV4Client {
     this.provider = provider
     this.signer = signer ?? null
     // Initialize BaseScan client with API key from environment
-    this.baseScanClient = new BaseScanClient(process.env.BASESCAN_API_KEY || '');
+    this.baseScanClient = new BaseScanClient(process.env.NEXT_PUBLIC_BASESCAN_API_KEY || '');
   }
 
   /**
