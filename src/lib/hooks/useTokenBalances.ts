@@ -4,14 +4,28 @@ import { useCallback, useEffect, useState } from 'react';
 import { formatUnits, createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
 
-// Standard ERC20 ABI for balanceOf - only this one should be used for external tokens
-const erc20BalanceOfAbi = [
+// Enhanced ERC20 ABI with more error handling built in
+const erc20Abi = [
   {
     name: 'balanceOf',
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ name: 'balance', type: 'uint256' }]
+  },
+  {
+    name: 'decimals',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }]
+  },
+  {
+    name: 'symbol',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'string' }]
   }
 ];
 
@@ -54,31 +68,49 @@ const DEFAULT_TOKEN_DATA = {
   }
 };
 
-// Create public client for fallback
+// Create public client for fallback with better timeout and retry mechanism
 const publicClient = createPublicClient({
   chain: baseSepolia,
-  transport: http(),
+  transport: http('https://sepolia.base.org', {
+    timeout: 30000, // 30 second timeout
+    retryCount: 3,
+    retryDelay: 1000
+  }),
 });
 
-// Function to get balance directly via RPC
+// Function to get balance directly via RPC with enhanced error handling
 async function getTokenBalanceFallback(tokenAddress: string, userAddress: string, decimals: number) {
   try {
-    // For ETH, use getBalance
-    if (tokenAddress === CONTRACT_ADDRESSES.ETH) {
-      const balance = await publicClient.getBalance({ address: userAddress as `0x${string}` });
-      return {
-        value: balance,
-        formatted: formatUnits(balance, 18),
-        decimals: 18,
-        symbol: 'ETH'
-      };
+    // Handle special case for ETH (native token)
+    if (tokenAddress.toLowerCase() === CONTRACT_ADDRESSES.ETH.toLowerCase()) {
+      try {
+        const balance = await publicClient.getBalance({ 
+          address: userAddress as `0x${string}` 
+        });
+        
+        return {
+          value: balance,
+          formatted: formatUnits(balance, 18),
+          decimals: 18,
+          symbol: 'ETH'
+        };
+      } catch (ethError) {
+        console.warn('Failed to get ETH balance:', ethError);
+        return {
+          value: BigInt(0),
+          formatted: '0',
+          decimals: 18,
+          symbol: 'ETH'
+        };
+      }
     }
     
-    // For ERC-20 tokens, try to directly access each token contract (not the hook)
+    // For ERC-20 tokens, try the balanceOf method with improved error handling
     try {
+      // First verify the contract exists and has the balanceOf function
       const balance = await publicClient.readContract({
         address: tokenAddress as `0x${string}`,
-        abi: erc20BalanceOfAbi,
+        abi: erc20Abi,
         functionName: 'balanceOf',
         args: [userAddress as `0x${string}`]
       });
@@ -88,30 +120,47 @@ async function getTokenBalanceFallback(tokenAddress: string, userAddress: string
         formatted: formatUnits(balance as bigint, decimals),
         decimals,
         symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
-          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address === tokenAddress
+          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === tokenAddress.toLowerCase()
         ) || 'UNKNOWN'
       };
     } catch (contractError) {
-      // If contract call fails, return zero balance
-      console.log(`External token not found or doesn't support standard balanceOf: ${tokenAddress}`);
+      console.warn(`Token balance check failed for ${tokenAddress}:`, contractError);
+      
+      // For known token addresses, provide more reliable fallback
+      const symbol = Object.keys(DEFAULT_TOKEN_DATA).find(
+        key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === tokenAddress.toLowerCase()
+      );
+      
+      if (symbol) {
+        console.log(`Using fallback for ${symbol} balance`);
+        return {
+          value: BigInt(0),
+          formatted: '0',
+          decimals: DEFAULT_TOKEN_DATA[symbol as keyof typeof DEFAULT_TOKEN_DATA].decimals,
+          symbol
+        };
+      }
+      
+      // Default fallback
       return {
         value: BigInt(0),
         formatted: '0',
         decimals,
-        symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
-          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address === tokenAddress
-        ) || 'UNKNOWN'
+        symbol: 'UNKNOWN'
       };
     }
   } catch (error) {
     console.error(`Fallback balance fetch failed for ${tokenAddress}:`, error);
+    // Last resort fallback - return zero balance with known details if possible
+    const symbol = Object.keys(DEFAULT_TOKEN_DATA).find(
+      key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === tokenAddress.toLowerCase()
+    );
+    
     return {
       value: BigInt(0),
       formatted: '0',
-      decimals,
-      symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
-        key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address === tokenAddress
-      ) || 'UNKNOWN'
+      decimals: symbol ? DEFAULT_TOKEN_DATA[symbol as keyof typeof DEFAULT_TOKEN_DATA].decimals : decimals,
+      symbol: symbol || 'UNKNOWN'
     };
   }
 }
@@ -129,25 +178,57 @@ export function useTokenBalances() {
       setIsLoading(true);
       
       try {
-        const results = await Promise.all([
+        const results = await Promise.allSettled([
           getTokenBalanceFallback(CONTRACT_ADDRESSES.ETH, address, 18),
           getTokenBalanceFallback(CONTRACT_ADDRESSES.USDC, address, 6),
           getTokenBalanceFallback(CONTRACT_ADDRESSES.WETH, address, 18),
           getTokenBalanceFallback(CONTRACT_ADDRESSES.DAI, address, 18)
         ]);
         
-        const [ethBalance, usdcBalance, wethBalance, daiBalance] = results;
+        // Process results, handling any failures
+        const balances: {[key: string]: TokenBalance} = {};
         
-        const balances: {[key: string]: TokenBalance} = {
-          ETH: createTokenBalance('ETH', ethBalance, false, null),
-          USDC: createTokenBalance('USDC', usdcBalance, false, null),
-          WETH: createTokenBalance('WETH', wethBalance, false, null),
-          DAI: createTokenBalance('DAI', daiBalance, false, null),
-        };
+        // ETH balance
+        if (results[0].status === 'fulfilled') {
+          balances.ETH = createTokenBalance('ETH', results[0].value, false, null);
+        } else {
+          balances.ETH = createTokenBalance('ETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, results[0].reason);
+        }
+        
+        // USDC balance
+        if (results[1].status === 'fulfilled') {
+          balances.USDC = createTokenBalance('USDC', results[1].value, false, null);
+        } else {
+          balances.USDC = createTokenBalance('USDC', { value: BigInt(0), formatted: '0', decimals: 6 }, false, results[1].reason);
+        }
+        
+        // WETH balance
+        if (results[2].status === 'fulfilled') {
+          balances.WETH = createTokenBalance('WETH', results[2].value, false, null);
+        } else {
+          balances.WETH = createTokenBalance('WETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, results[2].reason);
+        }
+        
+        // DAI balance
+        if (results[3].status === 'fulfilled') {
+          balances.DAI = createTokenBalance('DAI', results[3].value, false, null);
+        } else {
+          balances.DAI = createTokenBalance('DAI', { value: BigInt(0), formatted: '0', decimals: 18 }, false, results[3].reason);
+        }
         
         setTokenBalances(balances);
       } catch (error) {
         console.error("Error fetching balances:", error);
+        
+        // Provide fallback values for all tokens in case of complete failure
+        const fallbackBalances: {[key: string]: TokenBalance} = {
+          ETH: createTokenBalance('ETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, error as Error),
+          USDC: createTokenBalance('USDC', { value: BigInt(0), formatted: '0', decimals: 6 }, false, error as Error),
+          WETH: createTokenBalance('WETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, error as Error),
+          DAI: createTokenBalance('DAI', { value: BigInt(0), formatted: '0', decimals: 18 }, false, error as Error),
+        };
+        
+        setTokenBalances(fallbackBalances);
       } finally {
         setIsLoading(false);
       }
@@ -182,7 +263,15 @@ export function useTokenBalances() {
     if (!address) return;
     
     // Force a re-render that will trigger the useEffect
-    setTokenBalances({});
+    setIsLoading(true);
+    setTokenBalances(prev => {
+      // Update isLoading flag on all existing balances
+      const updated = { ...prev };
+      Object.keys(updated).forEach(key => {
+        updated[key] = { ...updated[key], isLoading: true };
+      });
+      return updated;
+    });
   }, [address]);
 
   return {

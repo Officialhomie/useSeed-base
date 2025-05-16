@@ -40,10 +40,19 @@ export function useTokenPrices(refreshInterval = 60000): TokenPricesData {
     error: null,
   });
 
-  const { client } = useUniswapClient();
+  const { client, error: clientError } = useUniswapClient();
 
   const fetchPrices = async () => {
-    if (!client) return;
+    if (!client) {
+      if (clientError) {
+        setData(prev => ({
+          ...prev,
+          isLoading: false,
+          error: new Error(`Could not initialize client: ${clientError.message}`)
+        }));
+      }
+      return;
+    }
 
     try {
       setData(prev => ({ ...prev, isLoading: true }));
@@ -65,15 +74,17 @@ export function useTokenPrices(refreshInterval = 60000): TokenPricesData {
     }
   };
 
-  // Initial fetch
+  // Initial fetch - only when client changes
   useEffect(() => {
-    fetchPrices();
+    if (client) {
+      fetchPrices();
+    }
   }, [client]);
 
   // Set up interval for refreshing
   useEffect(() => {
-    // Skip if refresh interval is 0 or negative
-    if (refreshInterval <= 0) return;
+    // Skip if refresh interval is 0 or negative or no client
+    if (refreshInterval <= 0 || !client) return;
 
     const intervalId = setInterval(fetchPrices, refreshInterval);
     return () => clearInterval(intervalId);

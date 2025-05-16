@@ -1,0 +1,326 @@
+Ran 10 tests for test/SpendSaveHook.t.sol:SpendSaveHookTest
+[PASS] testBasicSwap() (gas: 343357)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  Savings Strategy Percentage: 0
+  Savings Type: 0
+  User1 token0 balance before swap: 10000000000000000000000
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 500000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 10000000000000000000000
+    BalanceOutBefore: 10000000000000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -500000000000000000
+    Delta1: 482034731878982405
+    BalanceInAfter: 9999500000000000000000
+    BalanceOutAfter: 10000482034731878982405
+    Amount In (from balances): 500000000000000000
+    Amount Out (from balances): 482034731878982405
+    Savings balance after swap: 0
+  User1 token0 balance after swap: 9999500000000000000000
+  User1 savings balance: 0
+
+[PASS] testHookPermissions() (gas: 12735)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+
+[PASS] testSetup() (gas: 13818)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  Setup test passed!
+
+[PASS] test_DirectSavings() (gas: 340296)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  User1 savings balance before: 0
+  User1 savings balance after: 496000000000000000
+  Treasury savings balance: 4000000000000000
+
+[PASS] test_ExactOutputSwaps() (gas: 776363)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  === Testing Exact Output Swaps ===
+  Initial balances:
+    Token0: 10000000000000000000000
+    Token1: 10000000000000000000000
+    Savings: 0
+  
+Performing exact output swap (want exactly 0 token1):
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 200000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 10000000000000000000000
+    BalanceOutBefore: 10000000000000000000000
+    Expected savings (10%): 20000000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -222285399806250168
+    Delta1: 200000000000000000
+    BalanceInAfter: 9999777714600193749832
+    BalanceOutAfter: 10000200000000000000000
+    Amount In (from balances): 222285399806250168
+    Amount Out (from balances): 200000000000000000
+    Savings balance after swap: 19681280000000000
+  Final balances:
+    Token0: 9999777714600193749832
+    Token1: 10000200000000000000000
+    Savings: 19681280000000000
+
+[PASS] test_LargeAndSmallAmounts() (gas: 1000542)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  === Testing Large and Small Amounts ===
+  
+Swap with small amount (0.001 ETH):
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 1000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 10000000000000000000000
+    BalanceOutBefore: 10000000000000000000000
+    Expected savings (10%): 100000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -1000000000000000
+    Delta1: 897273162559707
+    BalanceInAfter: 9999999000000000000000
+    BalanceOutAfter: 10000000897273162559707
+    Amount In (from balances): 1000000000000000
+    Amount Out (from balances): 897273162559707
+    Savings balance after swap: 98406400000000
+    Initial savings: 0
+    Final savings: 98406400000000
+    Amount saved: 98406400000000
+  
+Swap with large amount (10 ETH):
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 10000000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 9999999000000000000000
+    BalanceOutBefore: 10000000897273162559707
+    Expected savings (10%): 1000000000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -10000000000000000000
+    Delta1: 4793294668563912548
+    BalanceInAfter: 9989999000000000000000
+    BalanceOutAfter: 10004794191941726472255
+    Amount In (from balances): 10000000000000000000
+    Amount Out (from balances): 4793294668563912548
+    Savings balance after swap: 984162406400000000
+    Initial savings: 98406400000000
+    Final savings: 984162406400000000
+    Amount saved: 984064000000000000
+
+[PASS] test_RoundUpSavings() (gas: 712311)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  === Testing Round-Up Savings ===
+  Strategy settings:
+    Percentage: 1000
+    Round Up: true
+  Initial savings: 0
+  Swapping 0 ETH
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 123000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 10000000000000000000000
+    BalanceOutBefore: 10000000000000000000000
+    Expected savings (10%): 12300000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -123000000000000000
+    Delta1: 61190435927529518
+    BalanceInAfter: 9999877000000000000000
+    BalanceOutAfter: 10000061190435927529518
+    Amount In (from balances): 123000000000000000
+    Amount Out (from balances): 61190435927529518
+    Savings balance after swap: 60519936000000000
+  Final savings: 60519936000000000
+  Amount saved: 60519936000000000
+  Base saving amount (10%): 12300000000000000
+  Rounded amount: 1000000000000000000
+  Expected savings after fee: 12201600000000000
+
+[PASS] test_SwapWithInputSavings() (gas: 795836)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  === Testing Swap with Input Savings ===
+  Strategy settings:
+    Percentage: 1000
+    Savings Type: 1
+  Initial balances:
+    Token0: 10000000000000000000000
+    Token1: 10000000000000000000000
+    Savings: 0
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 500000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 10000000000000000000000
+    BalanceOutBefore: 10000000000000000000000
+    Expected savings (10%): 50000000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -500000000000000000
+    Delta1: 435797445902528023
+    BalanceInAfter: 9999500000000000000000
+    BalanceOutAfter: 10000435797445902528023
+    Amount In (from balances): 500000000000000000
+    Amount Out (from balances): 435797445902528023
+    Savings balance after swap: 49203200000000000
+  Final balances:
+    Token0: 9999500000000000000000
+    Token1: 10000435797445902528023
+    Savings: 49203200000000000
+  Verification:
+    Expected amount saved (10%): 50000000000000000
+    Expected amount after fee: 49600000000000000
+    Actual amount saved: 49203200000000000
+  ERC6909 token balance: 49203200000000000
+
+[PASS] test_SwapWithOutputSavings() (gas: 848231)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  === Testing Swap with Output Savings ===
+  Strategy settings:
+    Percentage: 1000
+    Savings Type: 0
+  Initial balances:
+    Token0: 10000000000000000000000
+    Token1: 10000000000000000000000
+    Savings of output token: 0
+  Performing swap:
+    Sender: 0x0000000000000000000000000000000000000001
+    Zero for One: true
+    Amount Specified: 500000000000000000
+    TokenIn: 0x15cF58144EF33af1e14b5208015d11F9143E27b9
+    TokenOut: 0x212224D2F2d262cd093eE13240ca4873fcCBbA3C
+    BalanceInBefore: 10000000000000000000000
+    BalanceOutBefore: 10000000000000000000000
+    Including sender in hook data
+    Swap Successful
+    Delta0: -500000000000000000
+    Delta1: 433831258691084165
+    BalanceInAfter: 9999500000000000000000
+    BalanceOutAfter: 10000433831258691084165
+    Amount In (from balances): 500000000000000000
+    Amount Out (from balances): 433831258691084165
+    Savings balance after swap: 0
+  Final balances:
+    Token0: 9999500000000000000000
+    Token1: 10000433831258691084165
+    Savings of output token: 47817845402395055
+  Verification:
+    Actual amount saved: 47817845402395055
+    Savings ratio (BPS): 992
+
+[PASS] test_WithdrawalAndTokenBurning() (gas: 396886)
+Logs:
+  ============ BASE SETUP START ============
+  Resetting test state...
+  Initializing test pool with hook...
+  Pool initialized successfully
+  Liquidity added in -60 to +60 range
+  Liquidity added in -120 to +120 range
+  Liquidity added for full range
+  ============ BASE SETUP COMPLETE ============
+  === Testing Withdrawal and Token Burning ===
+  Depositing 1 ETH to savings
+  After deposit:
+    Savings balance: 992000000000000000
+    Token0 balance: 9999000000000000000000
+    ERC6909 token balance: 992000000000000000
+  Withdrawing 0 ETH from savings
+  After withdrawal:
+    Savings balance: 496000000000000000
+    Token0 balance: 9999492032000000000000
+    ERC6909 token balance: 496000000000000000
+  Verification:
+    Treasury fee rate: 80 basis points
+    Withdrawal fee: 3968000000000000
+    Expected token0 increase: 492032000000000000
+    Actual token0 increase: 492032000000000000
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 14.88ms (22.31ms CPU time)
