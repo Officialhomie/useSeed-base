@@ -16,6 +16,7 @@ import { useNotification } from './NotificationManager';
 import TokenSelector from './TokenSelector';
 import SwapWithSavingsGasInfo from './SwapWithSavingsGasInfo';
 import SpendSaveStrategyModal from './SpendSaveStrategyModal';
+import { TokenPriceDisplay } from './TokenPriceDisplay';
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
@@ -323,6 +324,9 @@ export default function SwapWithSavings() {
 
   return (
     <>
+      {/* Token Price Display */}
+      <TokenPriceDisplay />
+    
       <div className="w-full max-w-md mx-auto bg-gray-900 rounded-2xl shadow-lg p-6 border border-gray-800">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-white">Swap</h2>
