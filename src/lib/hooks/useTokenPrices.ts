@@ -59,7 +59,7 @@ export function useTokenPrices(refreshInterval = 60000): TokenPricesData {
       const pricesData = await client.getTokenPrices();
       
       setData({
-        prices: pricesData.prices,
+        prices: pricesData.prices as Record<SupportedTokenSymbol, TokenPrice>,
         apiStatus: pricesData.apiStatus,
         isLoading: false,
         error: null,
