@@ -6,6 +6,7 @@ import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import { calculateSavingsAmount, calculateActualSwapAmount } from '@/lib/utils/savingsCalculator';
 import { getSavingsTokenTypeName } from '@/lib/utils/savingsHelpers';
 import { describeToken } from '@/lib/uniswap/tokens';
+import { cn } from '@/lib/utils';
 
 interface SwapConfirmationModalProps {
   isOpen: boolean;
@@ -24,6 +25,11 @@ interface SwapConfirmationModalProps {
   dcaTargetToken?: string;
   usingFallbackGas?: boolean;
   gasEstimate?: string;
+  gasPriceGwei?: string;
+  gasPriceCategory?: 'safe' | 'standard' | 'fast';
+  savedAmount?: string;
+  actualSwapAmount?: string;
+  isLoading?: boolean;
 }
 
 const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
@@ -42,9 +48,13 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
   dcaEnabled = false,
   dcaTargetToken,
   usingFallbackGas = false,
-  gasEstimate = '0.001'
+  gasEstimate = '0.001',
+  gasPriceGwei,
+  gasPriceCategory = 'standard',
+  savedAmount,
+  actualSwapAmount,
+  isLoading = false
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
   const { address } = useAccount();
 
   // Calculate savings amount
@@ -55,8 +65,8 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
     disableSavings
   );
 
-  // Calculate actual swap amount
-  const actualSwapAmount = calculateActualSwapAmount(
+  // Calculate actual swap amount (rename to avoid conflict with prop)
+  const calculatedSwapAmount = calculateActualSwapAmount(
     fromAmount,
     strategy,
     overridePercentage,
@@ -67,13 +77,10 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
   const priceImpact = ((parseFloat(fromAmount) - parseFloat(toAmount)) / parseFloat(fromAmount) * 100).toFixed(2);
 
   const handleConfirm = async () => {
-    setIsLoading(true);
     try {
       await onConfirm();
     } catch (error) {
       console.error('Swap confirmation error:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -135,11 +142,19 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
             <span className="text-white">{slippage}%</span>
           </div>
           
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">Network Fee</span>
-            <span className="text-white">
-              {isLoading ? 'Calculating...' : `~${gasEstimate} ETH`}
-            </span>
+          <div className="mb-4 p-3 rounded-md bg-gray-800/50">
+            <div className="text-xs text-gray-400 mb-1.5">Transaction Fee</div>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center">
+                <span className="text-white font-medium">{gasEstimate} ETH</span>
+                {gasPriceGwei && (
+                  <span className="text-xs text-gray-400 ml-2">
+                    ({gasPriceGwei} Gwei • {gasPriceCategory})
+                  </span>
+                )}
+              </div>
+              {/* If you want to show USD equivalent, calculate it here */}
+            </div>
           </div>
         </div>
         
@@ -160,7 +175,7 @@ const SwapConfirmationModal: React.FC<SwapConfirmationModalProps> = ({
               
               {strategy.savingsTokenType === 0 && (
                 <p className="text-sm text-white mt-1">
-                  <span className="font-medium">Actual swap amount:</span> {actualSwapAmount} {fromToken}
+                  <span className="font-medium">Actual swap amount:</span> {calculatedSwapAmount} {fromToken}
                 </p>
               )}
             </div>

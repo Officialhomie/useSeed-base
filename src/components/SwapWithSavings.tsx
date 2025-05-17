@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { Address } from 'viem';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
@@ -14,9 +14,12 @@ import SwapConfirmationModal from './SwapConfirmationModal';
 import SpendSaveEventListeners from './SpendSaveEventListeners';
 import { useNotification } from './NotificationManager';
 import TokenSelector from './TokenSelector';
+import { TokenPriceDisplay } from './TokenPriceDisplay';
 import SwapWithSavingsGasInfo from './SwapWithSavingsGasInfo';
 import SpendSaveStrategyModal from './SpendSaveStrategyModal';
-import { TokenPriceDisplay } from './TokenPriceDisplay';
+import SavingsRatioIndicator from './SavingsRatioIndicator';
+import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
+import { cn } from '@/lib/utils';
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
@@ -53,6 +56,10 @@ export default function SwapWithSavings() {
   // Add state for validation error
   const [validationError, setValidationError] = useState<string | null>(null);
   
+  // New state for gas price
+  const [selectedGasPrice, setSelectedGasPrice] = useState<GasPriceCategory>('standard');
+  const [customGasPrice, setCustomGasPrice] = useState<number | null>(null);
+  
   // Set initial tokens once loaded
   useEffect(() => {
     if (tokens && tokens.length > 0 && !fromToken && !toToken) {
@@ -80,7 +87,8 @@ export default function SwapWithSavings() {
     usingFallbackGas,
     error,
     gasEstimate,
-    sizeCategory
+    sizeCategory,
+    estimatedGasLimit
   } = useSwapWithSavings(
     fromToken && toToken ? {
       fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC',
@@ -89,7 +97,9 @@ export default function SwapWithSavings() {
       slippage: parseFloat(slippage),
       strategy,
       overridePercentage,
-      disableSavings: disableSavingsForThisSwap
+      disableSavings: disableSavingsForThisSwap,
+      customGasPrice: customGasPrice,
+      gasPriceCategory: selectedGasPrice
     } : null
   );
   
@@ -109,11 +119,31 @@ export default function SwapWithSavings() {
     setToAmount("");
   };
   
-  // Calculate gas buffer - use fixed microamount for consistency
+  // Handle gas price selection from the selector
+  const handleGasPriceSelect = (category: GasPriceCategory, price: number) => {
+    setSelectedGasPrice(category);
+    setCustomGasPrice(price);
+  };
+  
+  // Calculate gas buffer using the dynamic gas estimator instead of hardcoded value
   const calculateGasBuffer = (): number => {
-    // Set fixed gas buffer to 0.0005411 ETH (approximately $1)
-    // This is extremely conservative to support micro-transactions
-    return 0.0005411;
+    // Base estimate on transaction size category
+    const bufferMap: {[key: string]: number} = {
+      'MICRO': 0.0004, // ~$1 at $2500/ETH
+      'SMALL': 0.0006, // ~$1.50 at $2500/ETH
+      'MEDIUM': 0.0008, // ~$2 at $2500/ETH
+      'LARGE': 0.001 // ~$2.50 at $2500/ETH
+    };
+    
+    // Default to medium if sizeCategory not available yet
+    const bufferAmount = bufferMap[sizeCategory || 'MEDIUM'];
+    
+    // Add 20% to buffer if customGasPrice is higher than standard
+    if (customGasPrice && customGasPrice > 50) { // High gas price threshold
+      return bufferAmount * 1.2;
+    }
+    
+    return bufferAmount;
   };
   
   // Find and update handleMaxClick function
@@ -206,33 +236,25 @@ export default function SwapWithSavings() {
   };
   
   // Validate amount before swap
-  const validateSwapAmount = () => {
-    if (!fromToken || !fromAmount) return false;
+  const validateSwapAmount = (amount: string, balance: string, isEth: boolean, gasBuffer: number): string | null => {
+    if (!amount || !balance) return null;
     
-    // Get current balance
-    const currentBalance = tokenBalances && tokenBalances[fromToken.symbol] 
-      ? parseFloat(tokenBalances[fromToken.symbol].formattedBalance)
-      : 0;
+    const amountValue = parseFloat(amount);
+    const balanceValue = parseFloat(balance);
     
-    // Amount user is trying to swap
-    const amount = parseFloat(fromAmount);
+    if (isNaN(amountValue) || isNaN(balanceValue)) return null;
     
-    // For extremely small amounts (less than $5 in ETH), reduce the gas buffer
-    if (fromToken.symbol === 'ETH' && amount < 0.003) {
-      // For micro-transactions, use a tiny buffer of just 0.0003 ETH
-      const microGasBuffer = 0.0003;
-      return amount <= currentBalance - microGasBuffer;
+    // Check if amount exceeds balance
+    if (amountValue > balanceValue) {
+      return `Insufficient balance`;
     }
     
-    // For ETH, ensure we're leaving enough for gas
-    if (fromToken.symbol === 'ETH') {
-      const gasBuffer = calculateGasBuffer();
-      // Check if amount + gas buffer exceeds balance
-      return amount <= currentBalance - gasBuffer;
+    // For ETH, check if we're leaving enough for gas
+    if (isEth && amountValue > balanceValue - gasBuffer) {
+      return `Leave ~${gasBuffer.toFixed(4)} ETH for gas fees`;
     }
     
-    // For other tokens, just check that amount doesn't exceed balance
-    return amount <= currentBalance;
+    return null;
   };
   
   // Handle swap button click
@@ -240,7 +262,7 @@ export default function SwapWithSavings() {
     if (!isConnected || !fromAmount || parseFloat(fromAmount) <= 0) return;
     
     // Add validation check
-    if (fromToken && fromToken.symbol === 'ETH' && !validateSwapAmount()) {
+    if (fromToken && fromToken.symbol === 'ETH' && !validateSwapAmount(fromAmount, tokenBalances.ETH.formattedBalance, true, calculateGasBuffer())) {
       addNotification({
         type: 'error',
         title: 'Insufficient Balance',
@@ -257,7 +279,7 @@ export default function SwapWithSavings() {
     setShowConfirmation(false);
     
     // Double-check validation before executing swap
-    if (validateSwapAmount()) {
+    if (validateSwapAmount(fromAmount, tokenBalances.ETH.formattedBalance, true, calculateGasBuffer())) {
       executeSwap().catch(error => {
         console.error("Swap execution error:", error);
         
@@ -308,6 +330,13 @@ export default function SwapWithSavings() {
         message: `Queued ${amount} ${fromTokenInfo.symbol} for conversion to ${toTokenInfo.symbol}`
       });
     }
+  };
+
+  // Add this function to handle strategy saving
+  const handleSaveStrategy = (newStrategy: any) => {
+    // Handle saving the strategy
+    console.log('Saving strategy:', newStrategy);
+    setShowStrategyModal(false);
   };
 
   if (isLoadingTokens || isLoadingStrategy) {
@@ -526,6 +555,14 @@ export default function SwapWithSavings() {
                 </span>
               </div>
             )}
+
+            {/* Add SavingsRatioIndicator */}
+            {savedAmount && actualSwapAmount && (
+              <SavingsRatioIndicator 
+                savingsAmount={savedAmount}
+                actualSwapAmount={actualSwapAmount}
+              />
+            )}
             
             {strategy.enableDCA && dcaEnabled && dcaTargetToken && (
               <div className="flex items-center mt-2 text-xs text-purple-300">
@@ -535,6 +572,28 @@ export default function SwapWithSavings() {
                 }</span>
               </div>
             )}
+          </div>
+        )}
+        
+        {/* Below the swap button, add the gas info component */}
+        {fromToken && fromToken.symbol === 'ETH' && fromAmount && parseFloat(fromAmount) > 0 && (
+          <div className="mt-4">
+            <SwapWithSavingsGasInfo 
+              gasLimit={estimatedGasLimit || 250000}
+              onGasPriceSelect={handleGasPriceSelect}
+              className="mt-4"
+            />
+          </div>
+        )}
+        
+        {/* Show any transaction errors */}
+        {error && (
+          <div className={cn(
+            "mt-4 p-3 rounded-lg text-sm",
+            "bg-red-900/20 border border-red-800/40 text-red-400"
+          )}>
+            <div className="font-medium">Transaction Error</div>
+            <div className="text-xs mt-1">{error.message || String(error)}</div>
           </div>
         )}
         
@@ -567,90 +626,49 @@ export default function SwapWithSavings() {
                   : "Swap"
           }
         </button>
-        
-        {/* Gas Info Display */}
-        {fromToken && (
-          <SwapWithSavingsGasInfo
-            fromToken={fromToken.symbol}
-            fromAmount={fromAmount}
-            gasEstimate={gasEstimate}
-            usingFallbackGas={usingFallbackGas}
-            isLoading={isSwapping || executionStatus === 'preparing'}
-          />
-        )}
-
-        {/* Transaction status */}
-        {executionStatus === 'success' && (
-          <div className="mt-4 p-3 bg-green-900/20 border border-green-800/30 rounded-lg text-sm text-green-400">
-            Swap completed successfully! 
-            {transactionHash && (
-              <a 
-                href={`https://sepolia.basescan.org/tx/${transactionHash}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center mt-1 text-blue-400 hover:text-blue-300"
-              >
-                View on explorer <FiExternalLink className="ml-1" />
-              </a>
-            )}
-          </div>
-        )}
-        
-        {executionStatus === 'error' && (
-          <div className="mt-4 p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400">
-            Swap failed. Please try again.
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-2 p-2 bg-red-900/20 border border-red-800/30 rounded-lg text-sm text-red-400 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>{error.message}</span>
-          </div>
-        )}
       </div>
       
-      {/* Confirmation Modal */}
-      {fromToken && toToken && (
+      {/* Confirmation modal */}
+      {showConfirmation && (
         <SwapConfirmationModal
           isOpen={showConfirmation}
           onClose={() => setShowConfirmation(false)}
           onConfirm={handleConfirmSwap}
-          fromToken={fromToken.symbol}
-          toToken={toToken.symbol}
+          fromToken={fromToken?.symbol || ''}
+          toToken={toToken?.symbol || ''}
           fromAmount={fromAmount}
           toAmount={toAmount}
           strategy={strategy}
           overridePercentage={overridePercentage}
           disableSavings={disableSavingsForThisSwap}
           slippage={slippage}
-          usingUniswapV4={true}
           dcaEnabled={dcaEnabled}
-          dcaTargetToken={dcaTargetToken ? tokens.find(t => t.address === dcaTargetToken)?.symbol : undefined}
+          dcaTargetToken={dcaTargetToken ? dcaTargetToken.toString() : undefined}
+          gasEstimate={gasEstimate || '0'}
+          gasPriceGwei={customGasPrice ? customGasPrice.toString() : '30'}
+          gasPriceCategory={selectedGasPrice}
+          savedAmount={savedAmount || '0'}
+          actualSwapAmount={actualSwapAmount || '0'}
+          isLoading={isSwapping}
           usingFallbackGas={usingFallbackGas}
-          gasEstimate={gasEstimate}
         />
       )}
       
-      {/* Event Listeners */}
-      <SpendSaveEventListeners
-        onSavingsProcessed={handleSavingsProcessed}
-        onDCAQueued={handleDCAQueued}
-      />
-      
-      {/* Strategy Modal */}
+      {/* Strategy modal */}
       {showStrategyModal && (
         <SpendSaveStrategyModal
           isOpen={showStrategyModal}
           onClose={() => setShowStrategyModal(false)}
+          onStrategyChange={handleSaveStrategy}
           strategy={strategy}
-          onStrategyChange={(newStrategy) => {
-            // Handle strategy change
-          }}
         />
       )}
+      
+      {/* Event listeners for notifications */}
+      <SpendSaveEventListeners
+        onSavingsProcessed={handleSavingsProcessed}
+        onDCAQueued={handleDCAQueued}
+      />
     </>
   );
 } 

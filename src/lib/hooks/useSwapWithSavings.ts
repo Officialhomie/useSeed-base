@@ -24,6 +24,8 @@ interface UseSwapWithSavingsProps {
   strategy: SpendSaveStrategy;
   overridePercentage: number | null;
   disableSavings: boolean;
+  customGasPrice?: number | null;
+  gasPriceCategory?: 'safe' | 'standard' | 'fast';
 }
 
 interface SwapWithSavingsResult {
@@ -40,6 +42,7 @@ interface SwapWithSavingsResult {
   usingFallbackGas: boolean;
   gasEstimate: string;
   sizeCategory?: string;
+  estimatedGasLimit: number;
 }
 
 /**
@@ -59,6 +62,7 @@ export default function useSwapWithSavings(
   const [gasEstimate, setGasEstimate] = useState('0');
   const [sizeCategory, setSizeCategory] = useState<string | undefined>(undefined);
   const [client, setClient] = useState<UniswapV4Client | null>(null);
+  const [estimatedGasLimit, setEstimatedGasLimit] = useState<number>(250000);
   
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({
     hash: transactionHash || undefined,
@@ -82,6 +86,8 @@ export default function useSwapWithSavings(
   };
   const overridePercentage = props?.overridePercentage || null;
   const disableSavings = props?.disableSavings || false;
+  const customGasPrice = props?.customGasPrice || null;
+  const gasPriceCategory = props?.gasPriceCategory || 'safe';
 
   // Calculate savings amount
   const calculatedSavingsAmount = calculateSavingsAmount(
@@ -335,6 +341,9 @@ export default function useSwapWithSavings(
       const gasEstimateWei = gasLimit * gasPrice;
       const gasEstimateEth = formatUnits(gasEstimateWei, 18);
       
+      // Set the gas limit state for UI components
+      setEstimatedGasLimit(Number(gasLimit));
+      
       // Update UI state for gas information
       setUsingFallbackGas(usingFallback);
       setGasEstimate(gasEstimateEth);
@@ -420,6 +429,7 @@ export default function useSwapWithSavings(
     isPreparing: executionStatus === 'preparing',
     usingFallbackGas,
     gasEstimate,
-    sizeCategory
+    sizeCategory,
+    estimatedGasLimit
   };
 } 

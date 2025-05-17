@@ -1,94 +1,61 @@
-import React from 'react';
-import { FiAlertCircle, FiInfo } from 'react-icons/fi';
+"use client";
 
-interface GasInfoProps {
-  fromToken: string;
-  fromAmount: string;
-  gasEstimate: string;
-  usingFallbackGas: boolean;
-  isLoading: boolean;
+import React, { useState } from 'react';
+import GasPriceSelector from './GasPriceSelector';
+import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
+
+interface SwapWithSavingsGasInfoProps {
+  gasLimit: number;
+  className?: string;
+  onGasPriceSelect?: (category: GasPriceCategory, gasPrice: number) => void;
 }
 
-/**
- * Component for displaying gas-related information and warnings in the UI
- */
-const SwapWithSavingsGasInfo: React.FC<GasInfoProps> = ({
-  fromToken,
-  fromAmount,
-  gasEstimate,
-  usingFallbackGas,
-  isLoading
-}) => {
-  // Convert string to number safely
-  const amount = parseFloat(fromAmount || '0');
-  
-  // Determine transaction size category
-  const isSmallTx = amount > 0 && amount < 0.01;
-  const isMicroTx = amount > 0 && amount < 0.001;
-  
-  // Only show for ETH transactions
-  if (fromToken !== 'ETH') return null;
+export default function SwapWithSavingsGasInfo({
+  gasLimit,
+  className,
+  onGasPriceSelect
+}: SwapWithSavingsGasInfoProps) {
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="space-y-2 mt-3">
-      {/* Gas estimate information */}
-      <div className="bg-gray-800/40 rounded-lg p-2 text-xs flex items-center">
-        <FiInfo className="text-gray-400 mr-2 flex-shrink-0" />
-        <div>
-          <span className="text-gray-300">Estimated gas fee:</span>
-          {' '}
-          <span className="text-white font-medium">
-            {isLoading ? 'Calculating...' : `~${parseFloat(gasEstimate).toFixed(6)} ETH`}
-          </span>
+    <div className={`border border-gray-800 rounded-lg overflow-hidden ${className || ''}`}>
+      <div 
+        className="flex justify-between items-center p-3 bg-gray-900/60 text-gray-300 cursor-pointer hover:bg-gray-900/80 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center">
+          <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span className="text-sm">Gas Settings</span>
         </div>
+        <svg 
+          className={`w-4 h-4 transition-transform ${expanded ? 'transform rotate-180' : ''}`}
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
       </div>
-      
-      {/* Fallback gas warning */}
-      {usingFallbackGas && (
-        <div className="bg-blue-900/20 border border-blue-800/30 rounded-lg p-2 text-xs flex items-center">
-          <FiInfo className="text-blue-400 mr-2 flex-shrink-0" />
-          <span className="text-blue-300">
-            Using optimized gas settings for this transaction with SpendSave features.
-          </span>
-        </div>
-      )}
-      
-      {/* Very small transaction warning */}
-      {isMicroTx && (
-        <div className="bg-yellow-900/20 border border-yellow-800/30 rounded-lg p-2 text-xs flex items-center">
-          <FiAlertCircle className="text-yellow-400 mr-2 flex-shrink-0" />
-          <span className="text-yellow-300">
-            Micro-transaction detected. Gas costs may be high relative to the transaction amount.
-            Consider larger swaps for better efficiency.
-          </span>
-        </div>
-      )}
-      
-      {/* Small transaction tip */}
-      {isSmallTx && !isMicroTx && (
-        <div className="bg-blue-900/20 border border-blue-800/30 rounded-lg p-2 text-xs flex items-center">
-          <FiInfo className="text-blue-400 mr-2 flex-shrink-0" />
-          <span className="text-blue-300">
-            Small transaction detected. Gas has been optimized for your SpendSave features.
-          </span>
-        </div>
-      )}
-      
-      {/* Buffer info */}
-      {fromAmount && parseFloat(fromAmount) > 0 && (
-        <div className="text-xs flex items-center text-gray-400 px-2">
-          <FiInfo className="mr-1 text-gray-500" size={12} />
-          <span>
-            {isMicroTx 
-              ? 'For micro-transactions, keep at least 0.0003 ETH for gas' 
-              : isSmallTx 
-                ? 'For small transactions, keep at least 0.0005 ETH for gas'
-                : 'Keep approximately 0.001 ETH for gas fees'}
-          </span>
+
+      {expanded && (
+        <div className="p-3 bg-gray-900/30">
+          <div className="text-xs text-gray-500 mb-3">
+            Select gas price option to optimize for speed vs. cost
+          </div>
+          
+          <GasPriceSelector 
+            gasLimit={gasLimit} 
+            onGasPriceSelect={onGasPriceSelect}
+          />
+          
+          <div className="mt-4 text-xs text-gray-500">
+            <p>Gas prices are fetched in real-time from BaseScan API and reflect current network conditions.</p>
+            <p className="mt-2">Estimated fees include a small buffer to ensure transaction success.</p>
+          </div>
         </div>
       )}
     </div>
   );
-};
-
-export default SwapWithSavingsGasInfo; 
+} 

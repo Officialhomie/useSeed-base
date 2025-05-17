@@ -5,6 +5,7 @@ import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowUp, FiBarChart2, FiDollarSign, FiTarget, FiClock, FiAward, FiAlertCircle } from 'react-icons/fi';
 import AnimatedProgressBar from './AnimatedProgressBar';
+import SavingsCalculator from './SavingsCalculator';
 
 // Import ABIs
 import SPEND_SAVE_STORAGE_ABI from '@/ABI/SpenSaveStorage.json';
@@ -459,6 +460,34 @@ export default function SavingsOverview() {
                 </motion.div>
               )}
             </div>
+          </div>
+          
+          {/* Savings Calculator */}
+          <div className="mb-8">
+            <h3 className="text-sm font-medium text-white mb-4 flex items-center">
+              <FiBarChart2 className="mr-2 text-blue-400" />
+              <span>Savings Impact Calculator</span>
+            </h3>
+            <SavingsCalculator
+              fromAmount="1.0"
+              fromToken={savedTokens.length > 0 ? getTokenSymbol(savedTokens[0]) : "ETH"}
+              tokenPrice={3000}
+              strategy={{
+                isConfigured: true,
+                currentPercentage: 1000, // 10%
+                autoIncrement: 100,
+                maxPercentage: 2000,
+                goalAmount: BigInt(0),
+                roundUpSavings: false,
+                enableDCA: false,
+                savingsTokenType: 0,
+                specificSavingsToken: "0x0000000000000000000000000000000000000000" as Address,
+              }}
+              overridePercentage={null}
+              disableSavings={false}
+              totalSaved={totalSavingsValue}
+              savingsGoalProgress={goalProgress}
+            />
           </div>
           
           {/* Saved Tokens List */}
