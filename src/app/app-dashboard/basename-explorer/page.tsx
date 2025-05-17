@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import BasenameExplorer from '@/components/BasenameExplorer';
+import '@/components/basename-explorer.css';
 
 export default function BasenameExplorerPage() {
   const [mounted, setMounted] = useState(false);
@@ -16,8 +17,10 @@ export default function BasenameExplorerPage() {
 
   return (
     <DashboardLayout>
-      <main className="p-6 overflow-auto h-full">
-        <BasenameExplorer />
+      <main className="p-4 md:p-8 overflow-auto h-full">
+        <div className="mt-4">
+          <BasenameExplorer />
+        </div>
       </main>
     </DashboardLayout>
   );

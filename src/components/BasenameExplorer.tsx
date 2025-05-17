@@ -54,7 +54,7 @@ const ProfileCard = ({ address }: { address: string }) => {
         </div>
       </div>
       <div className="profile-actions">
-        <button className="onchainkit-button">View Profile</button>
+        <button className="onchainkit-button primary">View Profile</button>
         <button className="onchainkit-button secondary">Follow</button>
       </div>
     </div>
