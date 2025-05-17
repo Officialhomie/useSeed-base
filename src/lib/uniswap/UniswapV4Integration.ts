@@ -1,6 +1,8 @@
 import { Address, encodeAbiParameters, parseUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import JSBI from 'jsbi';
+import { fetchFallbackGas } from '../gas/gasOracle';
+import { ethers } from 'ethers';
 
 /**
  * Interface for swap parameters
@@ -200,14 +202,46 @@ export function calculateEthBuffer(
   ethBalance: number,
   txSize: 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE'
 ): number {
-  const DEFAULT_GAS_PRICE = 30; // gwei
+  // Using the default gas price from gas oracle (fallback value is 30 gwei)
+  // Converting to a synchronous operation for this utility function
+  const estimatedGasPrice = 30; // gwei - will be overridden in async contexts
   
   // Gas limits from transaction size tiers
   const gasLimit = Number(TRANSACTION_SIZE_GAS[txSize].withDca);
   
   // Calculate estimated gas cost in ETH
   // gas_limit * gas_price(gwei) * 10^-9
-  const estimatedGasCost = gasLimit * DEFAULT_GAS_PRICE * 1e-9;
+  const estimatedGasCost = gasLimit * estimatedGasPrice * 1e-9;
+  
+  // Add 20% safety margin
+  const withSafetyMargin = estimatedGasCost * 1.2;
+  
+  // Cap at percentage of balance for very small balances
+  const maxBuffer = ethBalance * 0.2; // Max 20% of balance
+  
+  return Math.min(withSafetyMargin, maxBuffer);
+}
+
+/**
+ * Calculate buffer for ETH transactions asynchronously using current gas prices
+ * @param ethBalance User's ETH balance
+ * @param txSize Transaction size category
+ * @returns Promise resolving to recommended buffer in ETH
+ */
+export async function calculateEthBufferAsync(
+  ethBalance: number,
+  txSize: 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE'
+): Promise<number> {
+  // Get current gas price from oracle
+  const gasPriceBN = await fetchFallbackGas();
+  const gasPriceGwei = Number(ethers.utils.formatUnits(gasPriceBN, 'gwei'));
+  
+  // Gas limits from transaction size tiers
+  const gasLimit = Number(TRANSACTION_SIZE_GAS[txSize].withDca);
+  
+  // Calculate estimated gas cost in ETH
+  // gas_limit * gas_price(gwei) * 10^-9
+  const estimatedGasCost = gasLimit * gasPriceGwei * 1e-9;
   
   // Add 20% safety margin
   const withSafetyMargin = estimatedGasCost * 1.2;

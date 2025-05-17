@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { Address } from "viem";
 import DCATickStrategy from "./DCATickStrategy";
+import { CONTRACT_ADDRESSES } from "@/lib/contracts";
+import DCAContractAbi from '../ABI/DCA.json'
 
 // Chart component for visualizing investment history
 const InvestmentChart = ({ data }: { data: { date: string; amount: number }[] }) => {
@@ -380,12 +382,11 @@ export default function DCAComponent() {
   ];
 
   // Create DCA contract write hook
-  // In a real implementation, this would be used to write to the contract
-  const { /* writeContract, */ data: createData } = useWriteContract();
+  const { writeContract } = useWriteContract();
   
   // Wait for the transaction to complete
   const { isLoading: isCreateLoading, isSuccess: isCreateSuccess } = useWaitForTransactionReceipt({
-    hash: createData,
+    hash: undefined, // Will be updated when transaction is submitted
   });
 
   // Handle hydration
@@ -449,16 +450,14 @@ export default function DCAComponent() {
   const handleCreateStrategy = (data: { title: string; token: string; amount: string; frequency: string }) => {
     setIsLoading(true);
     
-    // In a real app, this would call your contract
-    // writeContract({
-    //   address: CONTRACT_ADDRESSES.DCA,
-    //   abi: [], // Replace with your contract ABI
-    //   functionName: 'createDCAStrategy',
-    //   args: [data.title, data.token, data.amount, data.frequency],
-    // });
-    
-    // Simulating contract interaction
-    setTimeout(() => {
+    try {
+      writeContract({
+        address: CONTRACT_ADDRESSES.DCA as `0x${string}`,
+        abi: DCAContractAbi,
+        functionName: 'createDCAStrategy',
+        args: [data.title, data.token, data.amount, data.frequency],
+      });
+
       const newStrategy: DCAStrategy = {
         id: dcaStrategies.length + 1,
         title: data.title,
@@ -472,8 +471,12 @@ export default function DCAComponent() {
       
       setDcaStrategies([...dcaStrategies, newStrategy]);
       setIsCreateModalOpen(false);
+      
+    } catch (error) {
+      console.error("Error creating DCA strategy:", error);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   // Show loading state
