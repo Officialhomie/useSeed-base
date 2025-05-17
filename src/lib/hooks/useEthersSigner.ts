@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { getEthersProvider, getEthersSigner, getWindowSigner } from '../utils/ethersAdapter'
 import { useAccount } from 'wagmi'
@@ -39,11 +39,13 @@ export function useEthersSigner(): UseEthersSignerResult {
     }
   }, [address, isConnected])
 
-  // lazy load signer on first call
-  if (signer === null && !isLoading && isConnected) {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    fetchSigner()
-  }
+  // Use useEffect to lazy load signer when component mounts and dependencies change
+  useEffect(() => {
+    if (signer === null && !isLoading && isConnected) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      fetchSigner()
+    }
+  }, [signer, isLoading, isConnected, fetchSigner])
 
   return {
     signer,

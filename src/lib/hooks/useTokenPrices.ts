@@ -29,7 +29,6 @@ export function useTokenPrices(refreshInterval = 60000): TokenPricesData {
       ETH: { price: 0, status: 'loading' },
       WETH: { price: 0, status: 'loading' },
       USDC: { price: 1, status: 'stable' },
-      DAI: { price: 1, status: 'stable' },
     },
     apiStatus: {
       isOperational: true,

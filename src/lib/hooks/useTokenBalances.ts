@@ -1,8 +1,31 @@
 import { useAccount, useBalance } from 'wagmi';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { useCallback, useEffect, useState } from 'react';
-import { formatUnits, createPublicClient, http } from 'viem';
+import { formatUnits, createPublicClient, http, isAddress, getAddress } from 'viem';
 import { baseSepolia } from 'viem/chains';
+
+// Utility functions for address validation
+function isValidAddress(address: string): boolean {
+  try {
+    return isAddress(address);
+  } catch (e) {
+    return false;
+  }
+}
+
+function normalizeAddress(address: string): `0x${string}` {
+  try {
+    // If the address is the special ETH placeholder, return it as is
+    if (address.toLowerCase() === CONTRACT_ADDRESSES.ETH.toLowerCase()) {
+      return address as `0x${string}`;
+    }
+    // Otherwise, try to get a checksummed address
+    return getAddress(address);
+  } catch (e) {
+    console.error(`Invalid address format: ${address}`, e);
+    throw new Error(`Invalid address format: ${address}`);
+  }
+}
 
 // Enhanced ERC20 ABI with more error handling built in
 const erc20Abi = [
@@ -59,13 +82,8 @@ const DEFAULT_TOKEN_DATA = {
     name: 'Wrapped Ether',
     address: CONTRACT_ADDRESSES.WETH,
     decimals: 18
-  },
-  DAI: {
-    symbol: 'DAI',
-    name: 'Dai Stablecoin',
-    address: CONTRACT_ADDRESSES.DAI,
-    decimals: 18
   }
+  // DAI has been removed as it doesn't exist on Base Sepolia
 };
 
 // Create public client for fallback with better timeout and retry mechanism
@@ -81,11 +99,36 @@ const publicClient = createPublicClient({
 // Function to get balance directly via RPC with enhanced error handling
 async function getTokenBalanceFallback(tokenAddress: string, userAddress: string, decimals: number) {
   try {
+    // Validate and normalize both addresses
+    if (!isValidAddress(userAddress)) {
+      throw new Error(`Invalid user address: ${userAddress}`);
+    }
+    
+    const normalizedUserAddress = normalizeAddress(userAddress);
+    let normalizedTokenAddress: `0x${string}`;
+    
+    try {
+      normalizedTokenAddress = normalizeAddress(tokenAddress);
+    } catch (e) {
+      console.error(`Invalid token address format: ${tokenAddress}`, e);
+      // Return fallback for this token
+      const symbol = Object.keys(DEFAULT_TOKEN_DATA).find(
+        key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === tokenAddress.toLowerCase()
+      );
+      
+      return {
+        value: BigInt(0),
+        formatted: '0',
+        decimals: symbol ? DEFAULT_TOKEN_DATA[symbol as keyof typeof DEFAULT_TOKEN_DATA].decimals : decimals,
+        symbol: symbol || 'UNKNOWN'
+      };
+    }
+    
     // Handle special case for ETH (native token)
-    if (tokenAddress.toLowerCase() === CONTRACT_ADDRESSES.ETH.toLowerCase()) {
+    if (normalizedTokenAddress.toLowerCase() === CONTRACT_ADDRESSES.ETH.toLowerCase()) {
       try {
         const balance = await publicClient.getBalance({ 
-          address: userAddress as `0x${string}` 
+          address: normalizedUserAddress 
         });
         
         return {
@@ -109,10 +152,10 @@ async function getTokenBalanceFallback(tokenAddress: string, userAddress: string
     try {
       // First verify the contract exists and has the balanceOf function
       const balance = await publicClient.readContract({
-        address: tokenAddress as `0x${string}`,
+        address: normalizedTokenAddress,
         abi: erc20Abi,
         functionName: 'balanceOf',
-        args: [userAddress as `0x${string}`]
+        args: [normalizedUserAddress]
       });
       
       return {
@@ -120,15 +163,15 @@ async function getTokenBalanceFallback(tokenAddress: string, userAddress: string
         formatted: formatUnits(balance as bigint, decimals),
         decimals,
         symbol: Object.keys(DEFAULT_TOKEN_DATA).find(
-          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === tokenAddress.toLowerCase()
+          key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === normalizedTokenAddress.toLowerCase()
         ) || 'UNKNOWN'
       };
     } catch (contractError) {
-      console.warn(`Token balance check failed for ${tokenAddress}:`, contractError);
+      console.warn(`Token balance check failed for ${normalizedTokenAddress}:`, contractError);
       
       // For known token addresses, provide more reliable fallback
       const symbol = Object.keys(DEFAULT_TOKEN_DATA).find(
-        key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === tokenAddress.toLowerCase()
+        key => DEFAULT_TOKEN_DATA[key as keyof typeof DEFAULT_TOKEN_DATA].address.toLowerCase() === normalizedTokenAddress.toLowerCase()
       );
       
       if (symbol) {
@@ -178,14 +221,32 @@ export function useTokenBalances() {
       setIsLoading(true);
       
       try {
+        // Validate user address before proceeding
+        if (!isValidAddress(address)) {
+          throw new Error(`Connected wallet address is invalid: ${address}`);
+        }
+        
+        // Validate token addresses before calling the balance function
+        const tokenAddresses = [
+          CONTRACT_ADDRESSES.ETH,
+          CONTRACT_ADDRESSES.USDC,
+          CONTRACT_ADDRESSES.WETH,
+        ];
+        
+        // Log warnings if any token addresses are invalid
+        tokenAddresses.forEach(addr => {
+          if (!isValidAddress(addr)) {
+            console.error(`Invalid token address detected: ${addr}`);
+          }
+        });
+        
         const results = await Promise.allSettled([
           getTokenBalanceFallback(CONTRACT_ADDRESSES.ETH, address, 18),
           getTokenBalanceFallback(CONTRACT_ADDRESSES.USDC, address, 6),
           getTokenBalanceFallback(CONTRACT_ADDRESSES.WETH, address, 18),
-          getTokenBalanceFallback(CONTRACT_ADDRESSES.DAI, address, 18)
         ]);
         
-        // Process results, handling any failures
+        // Process results, handling any failures with detailed logging
         const balances: {[key: string]: TokenBalance} = {};
         
         // ETH balance
@@ -209,13 +270,6 @@ export function useTokenBalances() {
           balances.WETH = createTokenBalance('WETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, results[2].reason);
         }
         
-        // DAI balance
-        if (results[3].status === 'fulfilled') {
-          balances.DAI = createTokenBalance('DAI', results[3].value, false, null);
-        } else {
-          balances.DAI = createTokenBalance('DAI', { value: BigInt(0), formatted: '0', decimals: 18 }, false, results[3].reason);
-        }
-        
         setTokenBalances(balances);
       } catch (error) {
         console.error("Error fetching balances:", error);
@@ -225,7 +279,6 @@ export function useTokenBalances() {
           ETH: createTokenBalance('ETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, error as Error),
           USDC: createTokenBalance('USDC', { value: BigInt(0), formatted: '0', decimals: 6 }, false, error as Error),
           WETH: createTokenBalance('WETH', { value: BigInt(0), formatted: '0', decimals: 18 }, false, error as Error),
-          DAI: createTokenBalance('DAI', { value: BigInt(0), formatted: '0', decimals: 18 }, false, error as Error),
         };
         
         setTokenBalances(fallbackBalances);

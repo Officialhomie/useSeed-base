@@ -216,30 +216,19 @@ export default function useSwapWithSavings(
           fallbackEstimate = (amountFloat * APPROX_ETH_PRICE).toFixed(6);
         } else if (toToken === 'WETH') {
           fallbackEstimate = amount;
-        } else if (toToken === 'DAI') {
-          fallbackEstimate = (amountFloat * APPROX_ETH_PRICE).toFixed(18);
         }
       } else if (toToken === 'ETH' || toToken === 'WETH') {
         // Reverse calculation for tokens to ETH/WETH
         const APPROX_TOKEN_PRICES: Record<string, number> = {
           'USDC': 1/2500, // 1 USDC = 1/2500 ETH
-          'DAI': 1/2500   // 1 DAI = 1/2500 ETH
         };
         
-        const tokenPrice = APPROX_TOKEN_PRICES[fromToken as 'USDC' | 'DAI'];
+        const tokenPrice = APPROX_TOKEN_PRICES[fromToken as 'USDC'];
         if (tokenPrice) {
           fallbackEstimate = (amountFloat * tokenPrice).toFixed(18);
         }
       }
       
-      // Fallback for USDC/DAI pair (1:1 rate)
-      if ((fromToken === 'USDC' && toToken === 'DAI') || (fromToken === 'DAI' && toToken === 'USDC')) {
-        // Both stablecoins trade roughly 1:1
-        fallbackEstimate = fromToken === 'USDC' 
-          ? amountFloat.toFixed(18)  // USDC → DAI (18 decimals)
-          : amountFloat.toFixed(6);  // DAI → USDC (6 decimals)
-      }
-
       if (fallbackEstimate !== '0') {
         console.info(`Using fallback price estimate for ${fromToken}->${toToken}: ${fallbackEstimate}`);
         setEstimatedOutput(fallbackEstimate);

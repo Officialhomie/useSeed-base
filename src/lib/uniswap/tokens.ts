@@ -27,21 +27,11 @@ export const USDC = new Token(
   'USD Coin'
 )
 
-// DAI token on Base Sepolia
-export const DAI = new Token(
-  CHAIN_ID,
-  '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb', // Base Sepolia DAI address
-  18,
-  'DAI',
-  'Dai Stablecoin'
-)
-
 // All supported tokens
 export const SUPPORTED_TOKENS = {
   ETH: NATIVE_ETH,
   WETH,
   USDC,
-  DAI,
 } as const
 
 // Flat registry keyed by lowercase address → metadata
@@ -80,12 +70,8 @@ export const SUPPORTED_PAIRS = [
   // ETH pairs
   ['ETH', 'WETH'],
   ['ETH', 'USDC'],
-  ['ETH', 'DAI'],
   // WETH pairs
   ['WETH', 'USDC'],
-  ['WETH', 'DAI'],
-  // Stablecoin pairs
-  ['USDC', 'DAI'],
 ] as const
 
 // Validate if a pair is supported
@@ -97,4 +83,42 @@ export function isPairSupported(
     ([a, b]) =>
       (a === tokenA && b === tokenB) || (a === tokenB && b === tokenA)
   )
+}
+
+// BONUS: Function to add DAI support when on Base Mainnet
+export function addDAISupport(chainId: number) {
+  // Base Mainnet chain ID
+  const BASE_MAINNET_CHAIN_ID = 8453;
+  
+  if (chainId === BASE_MAINNET_CHAIN_ID) {
+    console.log('Adding DAI support for Base Mainnet');
+    
+    // Create DAI token instance
+    const DAI = new Token(
+      BASE_MAINNET_CHAIN_ID,
+      '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb', // Base Mainnet DAI address
+      18,
+      'DAI',
+      'Dai Stablecoin'
+    );
+    
+    // Add to SUPPORTED_TOKENS (with type assertion to handle const)
+    (SUPPORTED_TOKENS as any).DAI = DAI;
+    
+    // Update TOKEN_REGISTRY
+    TOKEN_REGISTRY[DAI.address.toLowerCase()] = {
+      symbol: 'DAI',
+      name: 'Dai Stablecoin',
+      decimals: 18,
+    };
+    
+    // Add DAI pairs to SUPPORTED_PAIRS
+    (SUPPORTED_PAIRS as any).push(['ETH', 'DAI']);
+    (SUPPORTED_PAIRS as any).push(['WETH', 'DAI']);
+    (SUPPORTED_PAIRS as any).push(['USDC', 'DAI']);
+    
+    return true;
+  }
+  
+  return false;
 } 

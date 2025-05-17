@@ -12,6 +12,21 @@
     "@typescript-eslint/no-explicit-any": "warn",
     "react/no-unescaped-entities": "warn",
     "react-hooks/exhaustive-deps": "warn",
-    "@next/next/no-img-element": "warn"
+    "@next/next/no-img-element": "warn",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "VariableDeclarator[id.name=/DEFAULT_.*_PRICE|.*_PRICE_DEFAULT/]",
+        "message": "Hardcoded price constants are not allowed. Use BaseScanClient to fetch asset prices dynamically."
+      },
+      {
+        "selector": "PropertyDefinition[key.name=/DEFAULT_.*_PRICE|.*_PRICE_DEFAULT/]",
+        "message": "Hardcoded price constants are not allowed. Use BaseScanClient to fetch asset prices dynamically."
+      },
+      {
+        "selector": "Literal[value>100][parent.type='AssignmentExpression'][parent.left.property.name='price']",
+        "message": "Hardcoded price values are not allowed. Use BaseScanClient to fetch asset prices dynamically."
+      }
+    ]
   }
 }

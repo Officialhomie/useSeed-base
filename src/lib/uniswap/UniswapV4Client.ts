@@ -133,32 +133,6 @@ export class UniswapV4Client {
           tokenB,
           amountIn.quotient.toString()
         );
-      } else if (isSymbol(tokenA, 'USDC') && isSymbol(tokenB, 'DAI')) {
-        // 1:1 conversion with decimal adjustment
-        const amount = parseFloat(amountIn.toExact());
-        return CurrencyAmount.fromRawAmount(
-          tokenB,
-          ethers.utils.parseUnits(amount.toString(), 18).toString()
-        );
-      } else if (isSymbol(tokenA, 'DAI') && isSymbol(tokenB, 'USDC')) {
-        // 1:1 conversion with decimal adjustment
-        const amount = parseFloat(amountIn.toExact());
-        return CurrencyAmount.fromRawAmount(
-          tokenB,
-          ethers.utils.parseUnits(amount.toString(), 6).toString()
-        );
-      } else if (isSymbol(tokenA, 'ETH') && isSymbol(tokenB, 'DAI')) {
-        const amountOut = parseFloat(amountIn.toExact()) * ethPrice;
-        return CurrencyAmount.fromRawAmount(
-          tokenB,
-          ethers.utils.parseUnits(amountOut.toFixed(18), 18).toString()
-        );
-      } else if (isSymbol(tokenA, 'DAI') && isSymbol(tokenB, 'ETH')) {
-        const amountOut = parseFloat(amountIn.toExact()) / ethPrice;
-        return CurrencyAmount.fromRawAmount(
-          tokenB,
-          ethers.utils.parseUnits(amountOut.toFixed(18), 18).toString()
-        );
       }
       
       // Fallback to default 1:1 exchange rate if pair is not specifically handled
@@ -205,12 +179,12 @@ export class UniswapV4Client {
       
       // Check for common token pairs and assign appropriate prices
       // Carefully handle stablecoin-ETH pairs in both directions
-      if (isPair(token0, token1, 'USDC', 'ETH') || isPair(token0, token1, 'DAI', 'ETH')) {
+      if (isPair(token0, token1, 'USDC', 'ETH')) {
         // Calculate the price ratio (1/ethPrice for stablecoin to ETH)
         const priceRatio = 1 / ethPrice;
         
         // Handle the proper price direction based on token ordering
-        if ((isSymbol(token0, 'USDC') || isSymbol(token0, 'DAI')) && isSymbol(token1, 'ETH')) {
+        if (isSymbol(token0, 'USDC') && isSymbol(token1, 'ETH')) {
           // Stablecoin is token0, ETH is token1 (1 USDC = 1/ethPrice ETH)
           pairDescription = `${token0.symbol}-${token1.symbol} (stablecoin as token0)`;
           
@@ -250,12 +224,7 @@ export class UniswapV4Client {
         sqrtPriceX96 = JSBI.BigInt('79228162514264337593543950336') // sqrt(1) in Q96
         tickCurrent = 0
       }
-      // Stablecoin pairs - price should be ~1
-      else if (isPair(token0, token1, 'USDC', 'DAI')) {
-        pairDescription = `${token0.symbol}-${token1.symbol} (stablecoin pair)`;
-        sqrtPriceX96 = JSBI.BigInt('79228162514264337593543950336') // sqrt(1) in Q96
-        tickCurrent = 0
-      }
+      // Stablecoin pairs removed - DAI doesn't exist on Base Sepolia
       // Default fallback for any other pair - use safe middle values
       else {
         pairDescription = `${token0.symbol}-${token1.symbol} (using default values)`;
@@ -557,7 +526,7 @@ export class UniswapV4Client {
         ETH: { price: 0, status: 'loading' },
         WETH: { price: 0, status: 'loading' },
         USDC: { price: 1, status: 'stable' },
-        DAI: { price: 1, status: 'stable' },
+        // DAI removed as it doesn't exist on Base Sepolia
       };
       
       // API status tracking
@@ -597,7 +566,7 @@ export class UniswapV4Client {
           ETH: { price: 2500, status: 'error' },
           WETH: { price: 2500, status: 'error' },
           USDC: { price: 1, status: 'stable' },
-          DAI: { price: 1, status: 'stable' },
+          // DAI removed as it doesn't exist on Base Sepolia
         },
         apiStatus: {
           isOperational: false,

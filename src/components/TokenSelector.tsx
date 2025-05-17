@@ -70,17 +70,23 @@ export default function TokenSelector({
     return '0';
   };
 
+  // Format price display with loading state
+  const formatTokenPrice = (token: Token) => {
+    if (token.priceLoading) {
+      return 'Loading price...';
+    }
+    return `$${token.price.toFixed(2)}`;
+  };
+
   // Token logo placeholder (in a real app, you'd integrate actual token logos)
   const getTokenLogo = (symbol: string) => {
-    const colors: Record<string, string> = {
+    const tokenColorMap: Record<string, string> = {
       'ETH': 'bg-blue-500',
-      'WETH': 'bg-blue-600',
+      'WETH': 'bg-blue-400',
       'USDC': 'bg-green-500',
-      'DAI': 'bg-yellow-500',
-      'default': 'bg-gray-500'
     };
 
-    const color = colors[symbol] || colors.default;
+    const color = tokenColorMap[symbol] || 'bg-gray-500';
     
     return (
       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${color}`}>
@@ -168,11 +174,9 @@ export default function TokenSelector({
                     </div>
                     <div className="ml-auto flex flex-col items-end">
                       <span className="text-white">{getTokenBalance(token.symbol)}</span>
-                      {token.symbol === 'USDC' && tokenBalances && tokenBalances.USDC && (
-                        <span className="text-xs text-gray-400">
-                          ${parseFloat(tokenBalances.USDC.formattedBalance).toFixed(2)}
-                        </span>
-                      )}
+                      <span className={`text-xs ${token.priceLoading ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {formatTokenPrice(token)}
+                      </span>
                     </div>
                   </button>
                 ))

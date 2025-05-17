@@ -83,8 +83,8 @@ export default function SwapWithSavings() {
     sizeCategory
   } = useSwapWithSavings(
     fromToken && toToken ? {
-      fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC' | 'DAI',
-      toToken: toToken.symbol as 'ETH' | 'WETH' | 'USDC' | 'DAI',
+      fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC',
+      toToken: toToken.symbol as 'ETH' | 'WETH' | 'USDC',
       amount: fromAmount,
       slippage: parseFloat(slippage),
       strategy,
