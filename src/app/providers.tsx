@@ -6,17 +6,37 @@ import { WagmiProvider } from "wagmi";
 import { config } from "../../wagmi";
 import NotificationProvider from '@/components/NotificationManager';
 
-// Optional components for loading and error states
-const LoadingState = (): JSX.Element => (
-  <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-    <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-[2px] rounded-lg">
-      <div className="bg-black p-4 rounded-lg flex flex-col items-center">
-        <div className="w-10 h-10 border-4 border-t-blue-500 border-r-transparent border-b-purple-500 border-l-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-white text-sm">Initializing wallet connection...</p>
+// Non-blocking wallet connection indicator
+const WalletConnectionStatus = ({ status }: { status: 'connecting' | 'failed' | 'connected' | 'timeout' }): JSX.Element | null => {
+  if (status === 'connected') return null;
+  
+  return (
+    <div className="fixed top-4 right-4 z-50">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-[1px] rounded-lg">
+        <div className="bg-black p-3 rounded-lg flex items-center space-x-2">
+          {status === 'connecting' && (
+            <div className="w-4 h-4 border-2 border-t-blue-500 border-r-transparent border-b-purple-500 border-l-transparent rounded-full animate-spin"></div>
+          )}
+          {status === 'failed' && (
+            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          {status === 'timeout' && (
+            <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          <p className="text-white text-xs">
+            {status === 'connecting' && 'Connecting wallet...'}
+            {status === 'failed' && 'Wallet connection failed'}
+            {status === 'timeout' && 'Wallet connection delayed'}
+          </p>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ErrorBoundary = ({ 
   children, 
@@ -131,7 +151,7 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
     },
   }));
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [walletStatus, setWalletStatus] = useState<'connecting' | 'failed' | 'connected' | 'timeout'>('connecting');
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   
   // Handle asset loading
@@ -203,56 +223,61 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
     }
   }, []);
 
-  // Improved wallet initialization with better error handling
+  // Non-blocking wallet initialization with proper timeout
   useEffect(() => {
-    // Only try to initialize if we haven't hit max attempts
-    if (connectionAttempts >= 3) {
-      console.warn('Max connection attempts reached, proceeding anyway');
-      setIsLoading(false);
-      return;
-    }
+    // Setup timeout for wallet connection
+    const connectionTimeout = setTimeout(() => {
+      if (walletStatus === 'connecting') {
+        console.warn('Wallet connection taking longer than expected');
+        setWalletStatus('timeout');
+      }
+    }, 3000); // 3 seconds timeout for warning
     
     const initializeWallet = async () => {
-      setIsLoading(true);
-      
       try {
-        // Simulate wallet initialization
-        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Successfully initialized
-        setIsLoading(false);
+        // Simulate wallet initialization completion
+        // In production, this would be your actual wallet connection logic
+        setTimeout(() => {
+          setWalletStatus('connected');
+          console.log('Wallet initialized successfully');
+        }, 500); // Small delay just to simulate actual connection
       } catch (error) {
         console.error('Wallet initialization error:', error);
         
         // Increment attempt counter and retry if under max attempts
         if (connectionAttempts < 2) {
           setConnectionAttempts(prev => prev + 1);
-          // Give some delay before retrying
-          setTimeout(() => {
-            setIsLoading(false);
-          }, 1000);
+          setWalletStatus('connecting');
         } else {
-          // Max retries reached, proceed anyway
-          console.warn('Multiple connection attempts needed, but proceeding anyway');
-          setIsLoading(false);
+          // Max retries reached, mark as failed but still show the UI
+          setWalletStatus('failed');
+          console.warn('Wallet connection failed after multiple attempts');
         }
       }
     };
     
-    initializeWallet();
+    // Only try to initialize if we've failed or are connecting
+    if (walletStatus === 'connecting' || walletStatus === 'failed') {
+      initializeWallet();
+    }
     
     // Track wallet connection status
     const handleOnline = () => {
-      // When the browser comes back online, reset connection attempts
-      setConnectionAttempts(0);
+      // When the browser comes back online, retry connection
+      if (walletStatus !== 'connected') {
+        setConnectionAttempts(0);
+        setWalletStatus('connecting');
+      }
     };
     
     window.addEventListener('online', handleOnline);
     
     return () => {
       window.removeEventListener('online', handleOnline);
+      clearTimeout(connectionTimeout);
     };
-  }, [connectionAttempts, isLoading]);
+  }, [connectionAttempts, walletStatus]);
 
   return (
     <ErrorBoundary fallback={
@@ -270,7 +295,8 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
           <NotificationProvider>
-            {isLoading ? <LoadingState /> : children}
+            <WalletConnectionStatus status={walletStatus} />
+            {children}
           </NotificationProvider>
         </QueryClientProvider>
       </WagmiProvider>
