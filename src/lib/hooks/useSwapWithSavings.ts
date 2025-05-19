@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccount, useWaitForTransactionReceipt } from 'wagmi';
 import { useEthersSigner } from './useEthersSigner';
 import { getEthersProvider } from '../utils/ethersAdapter';
@@ -106,9 +106,15 @@ export default function useSwapWithSavings(
   );
 
   // Calculate actual swap amount (after savings deduction for INPUT type savings)
-  const actualSwapAmount = strategy.savingsTokenType === 0 && !disableSavings && props && strategy.isConfigured
-    ? (parseFloat(amount) - parseFloat(savingsPreview.rawAmount)).toString()
-    : amount;
+  // Memoized to prevent recalculation on every render
+  const actualSwapAmount = useMemo(() => {
+    if (strategy.savingsTokenType === 0 && !disableSavings && props && strategy.isConfigured) {
+      const inputAmount = parseFloat(amount);
+      const savingsRawAmount = parseFloat(savingsPreview.rawAmount);
+      return (inputAmount - savingsRawAmount).toString();
+    }
+    return amount;
+  }, [amount, savingsPreview.rawAmount, strategy.savingsTokenType, strategy.isConfigured, disableSavings, props]);
 
   // Get quote using Uniswap SDK
   useEffect(() => {
@@ -255,8 +261,30 @@ export default function useSwapWithSavings(
       }
     };
 
-    fetchQuote();
-  }, [address, fromToken, toToken, actualSwapAmount, amount, props]);
+    // Setup debouncing to prevent excessive API calls
+    const debounceTimeout = 800; // 800ms debounce time
+    
+    // Only execute the fetch if we have valid input data and a reasonable amount
+    const timerId = address && fromToken && toToken && amount && parseFloat(amount) > 0 
+      ? setTimeout(fetchQuote, debounceTimeout)
+      : undefined;
+    
+    // Cleanup function to clear the timer if the component unmounts
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
+    
+  // Only re-run when these dependencies change - reduces unnecessary API calls
+  }, [
+    address, 
+    fromToken, 
+    toToken, 
+    // Debounce the amount by converting to a string with limited precision
+    amount && parseFloat(amount) > 0 ? parseFloat(amount).toFixed(4) : "0",
+    // Only include these if they actually affect the swap calculations
+    strategy.isConfigured && !disableSavings ? strategy.currentPercentage : 0,
+    disableSavings
+  ]);
 
   // Internal helper to lazily instantiate and cache a UniswapV4Client instance
   const ensureClient = useCallback(async (): Promise<UniswapV4Client> => {

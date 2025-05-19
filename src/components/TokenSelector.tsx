@@ -89,7 +89,7 @@ export default function TokenSelector({
     const color = tokenColorMap[symbol] || 'bg-gray-500';
     
     return (
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${color}`}>
+      <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center ${color}`}>
         <span className="text-white font-bold text-xs">{symbol.substring(0, 2)}</span>
       </div>
     );
@@ -99,17 +99,17 @@ export default function TokenSelector({
     <div className="relative">
       {/* Token Select Button */}
       <button
-        className={`bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium flex items-center ${disabled || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`bg-gray-700 hover:bg-gray-600 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-medium flex items-center ${disabled || isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
         onClick={() => !disabled && !isLoading && setIsOpen(true)}
         type="button"
         disabled={disabled || isLoading}
       >
         {value ? (
           <>
-            <span className="mr-2">{getTokenLogo(value.symbol)}</span>
+            <span className="mr-1 sm:mr-2">{getTokenLogo(value.symbol)}</span>
             <span>{value.symbol}</span>
             {tokenBalances && tokenBalances[value.symbol] && (
-              <span className="ml-2 text-sm text-gray-400 hidden sm:inline">
+              <span className="ml-2 text-xs text-gray-400 hidden sm:inline">
                 Balance: {tokenBalances[value.symbol].formattedBalance}
               </span>
             )}
@@ -117,35 +117,35 @@ export default function TokenSelector({
         ) : (
           <span>{isLoading ? "Loading..." : label}</span>
         )}
-        <FiChevronDown className="ml-2" />
+        <FiChevronDown className="ml-1 sm:ml-2" />
       </button>
 
       {/* Modal Overlay */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center px-4 py-6">
           <div 
             ref={modalRef}
-            className="bg-gray-900 rounded-xl w-full max-w-md mx-4 p-4 animate-fade-in-up"
+            className="bg-gray-900 rounded-xl w-full max-w-md mx-auto p-3 sm:p-4 animate-fade-in-up max-h-[90vh] flex flex-col"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-white">Select a token</h3>
+            <div className="flex justify-between items-center mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-bold text-white">Select a token</h3>
               <button 
                 onClick={() => setIsOpen(false)}
                 className="text-gray-400 hover:text-white"
               >
-                <FiX size={24} />
+                <FiX size={20} />
               </button>
             </div>
 
             {/* Search Input */}
-            <div className="relative mb-4">
+            <div className="relative mb-3 sm:mb-4">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <FiSearch className="text-gray-400" />
+                <FiSearch className="text-gray-400 h-4 w-4" />
               </div>
               <input
                 type="text"
                 placeholder="Search name or paste address"
-                className="bg-gray-800 text-white pl-10 pr-4 py-3 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="bg-gray-800 text-white text-sm pl-10 pr-4 py-2 sm:py-3 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
@@ -153,27 +153,27 @@ export default function TokenSelector({
             </div>
 
             {/* Token List */}
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-[50vh] sm:max-h-96 overflow-y-auto">
               {isLoading ? (
-                <div className="text-center py-4 text-gray-400">
+                <div className="text-center py-4 text-gray-400 text-sm">
                   Loading tokens...
                 </div>
               ) : filteredTokens.length > 0 ? (
                 filteredTokens.map(token => (
                   <button
                     key={token.address}
-                    className="w-full flex items-center px-4 py-3 hover:bg-gray-800 rounded-lg transition-colors mb-1"
+                    className="w-full flex items-center px-3 sm:px-4 py-2 sm:py-3 hover:bg-gray-800 rounded-lg transition-colors mb-1"
                     onClick={() => handleTokenSelect(token)}
                   >
-                    <div className="mr-3">
+                    <div className="mr-2 sm:mr-3">
                       {getTokenLogo(token.symbol)}
                     </div>
                     <div className="flex flex-col items-start">
-                      <span className="font-medium text-white">{token.symbol}</span>
-                      <span className="text-sm text-gray-400">{token.name}</span>
+                      <span className="font-medium text-white text-sm sm:text-base">{token.symbol}</span>
+                      <span className="text-xs sm:text-sm text-gray-400 truncate max-w-[100px] sm:max-w-[200px]">{token.name}</span>
                     </div>
                     <div className="ml-auto flex flex-col items-end">
-                      <span className="text-white">{getTokenBalance(token.symbol)}</span>
+                      <span className="text-white text-sm">{getTokenBalance(token.symbol)}</span>
                       <span className={`text-xs ${token.priceLoading ? 'text-gray-500' : 'text-gray-400'}`}>
                         {formatTokenPrice(token)}
                       </span>
@@ -181,7 +181,7 @@ export default function TokenSelector({
                   </button>
                 ))
               ) : (
-                <div className="text-center py-4 text-gray-400">
+                <div className="text-center py-4 text-gray-400 text-xs sm:text-sm">
                   {searchQuery ? 
                     `No tokens found matching "${searchQuery}"` : 
                     "No tokens available"}

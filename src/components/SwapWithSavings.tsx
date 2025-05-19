@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
 import { Address } from 'viem';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
@@ -62,7 +62,35 @@ export default function SwapWithSavings() {
   const [selectedGasPrice, setSelectedGasPrice] = useState<GasPriceCategory>('standard');
   const [customGasPrice, setCustomGasPrice] = useState<number | null>(null);
   
-  // Use the swap with savings hook
+  // Memoize swap parameters to prevent unnecessary re-renders and API calls
+  const swapParams = useMemo(() => {
+    if (!fromToken || !toToken) return null;
+    
+    return {
+      fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC',
+      toToken: toToken.symbol as 'ETH' | 'WETH' | 'USDC',
+      amount: fromAmount,
+      slippage: parseFloat(slippage),
+      strategy,
+      overridePercentage,
+      disableSavings: disableSavingsForThisSwap,
+      customGasPrice: customGasPrice,
+      gasPriceCategory: selectedGasPrice
+    };
+  }, [
+    fromToken?.symbol, 
+    toToken?.symbol, 
+    // Only update when amount changes by at least 0.0001
+    fromAmount && parseFloat(fromAmount) > 0 ? parseFloat(fromAmount).toFixed(4) : "0",
+    slippage,
+    strategy.isConfigured && !disableSavingsForThisSwap ? strategy.currentPercentage : 0,
+    overridePercentage,
+    disableSavingsForThisSwap,
+    customGasPrice,
+    selectedGasPrice
+  ]);
+  
+  // Use the swap with savings hook with memoized parameters
   const { 
     executionStatus,
     savedAmount,
@@ -78,19 +106,7 @@ export default function SwapWithSavings() {
     sizeCategory,
     estimatedGasLimit,
     savingsPreview
-  } = useSwapWithSavings(
-    fromToken && toToken ? {
-      fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC',
-      toToken: toToken.symbol as 'ETH' | 'WETH' | 'USDC',
-      amount: fromAmount,
-      slippage: parseFloat(slippage),
-      strategy,
-      overridePercentage,
-      disableSavings: disableSavingsForThisSwap,
-      customGasPrice: customGasPrice,
-      gasPriceCategory: selectedGasPrice
-    } : null
-  );
+  } = useSwapWithSavings(swapParams);
   
   // Update estimated output amount when it changes
   useEffect(() => {
@@ -377,61 +393,63 @@ export default function SwapWithSavings() {
       {/* Token Price Display */}
       <TokenPriceDisplay />
     
-      <div className="w-full max-w-md mx-auto bg-gray-900 rounded-2xl shadow-lg p-6 border border-gray-800">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-white">Swap</h2>
+      <div className="w-full max-w-md mx-auto bg-gray-900 rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-800">
+        <div className="flex justify-between items-center mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-bold text-white">Swap</h2>
           <div className="flex space-x-2">
             <button
               onClick={() => setShowStrategyModal(true)}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+              className="p-1.5 sm:p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
               title="Savings Strategy"
             >
-              <FiTarget className="text-green-400" />
+              <FiTarget className="text-green-400 h-4 w-4 sm:h-5 sm:w-5" />
             </button>
             <button 
               onClick={() => setShowSettings(!showSettings)}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+              className="p-1.5 sm:p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
               title="Transaction Settings"
             >
-              <FiSettings className="text-gray-400" />
+              <FiSettings className="text-gray-400 h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
         </div>
         
         {/* Settings panel */}
         {showSettings && (
-          <div className="mb-4 bg-gray-800/40 rounded-xl p-4">
-            <h3 className="text-white font-medium mb-3">Transaction Settings</h3>
+          <div className="mb-4 bg-gray-800/40 rounded-xl p-3 sm:p-4">
+            <h3 className="text-white font-medium mb-2 sm:mb-3">Transaction Settings</h3>
             
             <div className="mb-4">
               <label className="block text-sm text-gray-400 mb-2">Slippage Tolerance</label>
-              <div className="flex space-x-2">
+              <div className="flex flex-wrap gap-2">
                 <button 
                   onClick={() => setSlippage("0.1")}
-                  className={`px-3 py-1 rounded-md ${slippage === "0.1" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm ${slippage === "0.1" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
                 >
                   0.1%
                 </button>
                 <button 
                   onClick={() => setSlippage("0.5")}
-                  className={`px-3 py-1 rounded-md ${slippage === "0.5" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm ${slippage === "0.5" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
                 >
                   0.5%
                 </button>
                 <button 
                   onClick={() => setSlippage("1.0")}
-                  className={`px-3 py-1 rounded-md ${slippage === "1.0" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm ${slippage === "1.0" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
                 >
                   1.0%
                 </button>
-                <input
-                  type="text"
-                  value={slippage}
-                  onChange={(e) => handleSlippageChange(e.target.value)}
-                  className="bg-gray-700 text-white rounded-md px-3 py-1 w-20 text-right"
-                  placeholder="Custom"
-                />
-                <span className="text-white flex items-center">%</span>
+                <div className="flex items-center">
+                  <input
+                    type="text"
+                    value={slippage}
+                    onChange={(e) => handleSlippageChange(e.target.value)}
+                    className="bg-gray-700 text-white rounded-md px-2 sm:px-3 py-1 w-14 sm:w-20 text-right text-xs sm:text-sm"
+                    placeholder="Custom"
+                  />
+                  <span className="text-white flex items-center text-xs sm:text-sm ml-1">%</span>
+                </div>
               </div>
             </div>
             
@@ -475,12 +493,12 @@ export default function SwapWithSavings() {
         )}
         
         {/* From Token Input Field - Let's add the balance display and MAX button here */}
-        <div className="bg-gray-800 rounded-xl p-4 mb-2">
-          <div className="flex justify-between mb-2">
-            <label className="text-sm text-gray-400">From</label>
+        <div className="bg-gray-800 rounded-xl p-3 sm:p-4 mb-2">
+          <div className="flex flex-wrap justify-between items-center mb-2">
+            <label className="text-xs sm:text-sm text-gray-400">From</label>
             {fromToken && tokenBalances && tokenBalances[fromToken.symbol] && (
-              <div className="text-xs text-gray-400 flex items-center">
-                Balance: {tokenBalances[fromToken.symbol].formattedBalance}
+              <div className="text-xs text-gray-400 flex items-center mt-1 sm:mt-0">
+                <span className="whitespace-nowrap">Balance: {tokenBalances[fromToken.symbol].formattedBalance}</span>
                 <button
                   onClick={handleMaxClick}
                   className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
@@ -497,7 +515,7 @@ export default function SwapWithSavings() {
               value={fromAmount}
               onChange={(e) => handleFromAmountChange(e.target.value)}
               placeholder="0.0"
-              className="bg-transparent text-white text-xl w-full focus:outline-none font-medium"
+              className="bg-transparent text-white text-lg sm:text-xl w-full focus:outline-none font-medium"
               inputMode="decimal"
             />
             <TokenSelector
@@ -531,12 +549,12 @@ export default function SwapWithSavings() {
         </div>
         
         {/* To Token Input Field */}
-        <div className="bg-gray-800 rounded-xl p-4 mb-4">
-          <div className="flex justify-between mb-2">
-            <label className="text-sm text-gray-400">To</label>
+        <div className="bg-gray-800 rounded-xl p-3 sm:p-4 mb-4">
+          <div className="flex flex-wrap justify-between items-center mb-2">
+            <label className="text-xs sm:text-sm text-gray-400">To</label>
             {toToken && tokenBalances && tokenBalances[toToken.symbol] && (
-              <div className="text-xs text-gray-400">
-                Balance: {tokenBalances[toToken.symbol].formattedBalance}
+              <div className="text-xs text-gray-400 mt-1 sm:mt-0">
+                <span className="whitespace-nowrap">Balance: {tokenBalances[toToken.symbol].formattedBalance}</span>
               </div>
             )}
           </div>
@@ -546,7 +564,7 @@ export default function SwapWithSavings() {
               value={toAmount}
               readOnly
               placeholder="0.0"
-              className="bg-transparent text-white text-xl w-full focus:outline-none font-medium"
+              className="bg-transparent text-white text-lg sm:text-xl w-full focus:outline-none font-medium"
             />
             <TokenSelector
               value={toToken}
@@ -656,7 +674,7 @@ export default function SwapWithSavings() {
         <button
           disabled={!fromToken || !toToken || !fromAmount || !isConnected || isSwapping || parseFloat(fromAmount) <= 0 || validationError !== null}
           onClick={handleSwapClick}
-          className={`w-full py-3 rounded-xl font-bold ${
+          className={`w-full py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-bold ${
             fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0 && validationError === null
               ? "bg-blue-600 hover:bg-blue-500 text-white"
               : "bg-gray-700 text-gray-400 cursor-not-allowed"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { SupportedTokenSymbol } from '../uniswap/tokens';
 import { calculateSavingsAmount } from '../utils/savingsCalculator';
 import { SpendSaveStrategy } from './useSpendSaveStrategy';
@@ -20,38 +20,23 @@ export default function useSavingsPreview(
   overridePercentage: number | null = null,
   disableSavings: boolean = false
 ): SavingsPreviewResult {
-  const [preview, setPreview] = useState<SavingsPreviewResult>({
-    rawAmount: '0',
-    formattedAmount: '0',
-    percentage: 0,
-    isEnabled: false
-  });
+  // Calculate preview in a useMemo to avoid triggering renders via setState in useEffect
+  // This eliminates the infinite update cycle
+  return useMemo(() => {
+    // Default empty result
+    const emptyPreview = {
+      rawAmount: '0',
+      formattedAmount: '0',
+      percentage: 0,
+      isEnabled: false
+    };
 
-  // Calculate savings preview whenever input parameters change
-  useEffect(() => {
-    if (!inputAmount || !fromToken || !strategy) {
-      setPreview({
-        rawAmount: '0',
-        formattedAmount: '0',
-        percentage: 0,
-        isEnabled: false
-      });
-      return;
+    if (!inputAmount || !fromToken || !strategy || disableSavings) {
+      return emptyPreview;
     }
 
     try {
-      // Skip calculation if savings are disabled
-      if (disableSavings) {
-        setPreview({
-          rawAmount: '0',
-          formattedAmount: '0',
-          percentage: 0,
-          isEnabled: false
-        });
-        return;
-      }
-
-      // Get savings amount
+      // Get savings amount using direct calculation
       const savingsAmount = calculateSavingsAmount(
         inputAmount,
         strategy,
@@ -64,22 +49,25 @@ export default function useSavingsPreview(
         ? overridePercentage
         : strategy.currentPercentage / 100; // Convert basis points to percentage
 
-      setPreview({
+      return {
         rawAmount: savingsAmount,
         formattedAmount: parseFloat(savingsAmount).toFixed(6),
         percentage: effectivePercentage,
         isEnabled: strategy.isConfigured && !disableSavings
-      });
+      };
     } catch (error) {
       console.error('Error calculating savings preview:', error);
-      setPreview({
-        rawAmount: '0',
-        formattedAmount: '0',
-        percentage: 0,
-        isEnabled: false
-      });
+      return emptyPreview;
     }
-  }, [inputAmount, fromToken, strategy, overridePercentage, disableSavings]);
-
-  return preview;
+  }, [
+    // Only include stable dependencies that won't change on every render
+    inputAmount,
+    fromToken,
+    // Only relevant strategy fields, not the entire object
+    strategy.isConfigured,
+    strategy.currentPercentage,
+    strategy.roundUpSavings,
+    overridePercentage,
+    disableSavings
+  ]);
 }
