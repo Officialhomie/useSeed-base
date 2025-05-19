@@ -42,6 +42,41 @@ function buildInfuraUrl(chain: 'base-sepolia' | 'base') {
 const baseSepoliaTransports = [
   buildAlchemyUrl('base-sepolia') ? http(buildAlchemyUrl('base-sepolia')!, { timeout: 10000, fetchOptions: { mode: 'cors', cache: 'no-cache' } }) : null,
   // buildInfuraUrl('base-sepolia') ? http(buildInfuraUrl('base-sepolia')!, { timeout: 10000, fetchOptions: { mode: 'cors', cache: 'no-cache' } }) : null,
+  
+  // Check for custom RPC URL from env variable first
+  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC ? http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC, { 
+    timeout: 12000,
+    fetchOptions: {
+      mode: 'cors',
+      cache: 'no-cache',
+    }
+  }) : null,
+  
+  // Check for backup RPC URL if provided
+  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_BACKUP ? http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_BACKUP, { 
+    timeout: 12000,
+    fetchOptions: {
+      mode: 'cors',
+      cache: 'no-cache',
+    }
+  }) : null,
+  
+  // Additional RPC providers if configured
+  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_QUICKNODE ? http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_QUICKNODE, { 
+    timeout: 12000,
+    fetchOptions: { mode: 'cors', cache: 'no-cache' },
+  }) : null,
+  
+  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_BLAST ? http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_BLAST, { 
+    timeout: 12000,
+    fetchOptions: { mode: 'cors', cache: 'no-cache' },
+  }) : null,
+  
+  process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_NODEREAL ? http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_NODEREAL, { 
+    timeout: 12000,
+    fetchOptions: { mode: 'cors', cache: 'no-cache' },
+  }) : null,
+  
   // Support for public gateway endpoints that have CORS enabled
   http('https://sepolia.base.org', { 
     timeout: 10000,
@@ -50,6 +85,7 @@ const baseSepoliaTransports = [
       cache: 'no-cache',
     }
   }),
+  
   // Alternate node with longer timeout
   http('https://base-sepolia-rpc.publicnode.com', { 
     timeout: 15000,
@@ -58,14 +94,19 @@ const baseSepoliaTransports = [
       cache: 'no-cache',
     }
   }),
-  http('https://lb.drpc.org/ogrpc?network=base-sepolia', {
-    timeout: 15000,
-    fetchOptions: { mode: 'cors', cache: 'no-cache' },
-  }),
+  
+  // Removing the problematic DRPC endpoint
+  // http('https://lb.drpc.org/ogrpc?network=base-sepolia', {
+  //   timeout: 15000,
+  //   fetchOptions: { mode: 'cors', cache: 'no-cache' },
+  // }),
+  
+  // Tenderly gateway
   http('https://base-sepolia.gateway.tenderly.co', {
     timeout: 15000,
     fetchOptions: { mode: 'cors', cache: 'no-cache' },
   }),
+  
   // Local proxy option if direct access fails
   http('/api/rpc/base-sepolia', { 
     timeout: 8000,
