@@ -20,6 +20,8 @@ import SpendSaveStrategyModal from './SpendSaveStrategyModal';
 import SavingsRatioIndicator from './SavingsRatioIndicator';
 import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
 import { cn } from '@/lib/utils';
+import SavingsSummary from './SavingsSummary';
+import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
@@ -60,20 +62,6 @@ export default function SwapWithSavings() {
   const [selectedGasPrice, setSelectedGasPrice] = useState<GasPriceCategory>('standard');
   const [customGasPrice, setCustomGasPrice] = useState<number | null>(null);
   
-  // Set initial tokens once loaded
-  useEffect(() => {
-    if (tokens && tokens.length > 0 && !fromToken && !toToken) {
-      try {
-        setFromToken(tokens[0]);
-        if (tokens.length > 1) {
-          setToToken(tokens[1]);
-        }
-      } catch (error) {
-        console.error("Error setting initial tokens:", error);
-      }
-    }
-  }, [tokens, fromToken, toToken]);
-  
   // Use the swap with savings hook
   const { 
     executionStatus,
@@ -88,7 +76,8 @@ export default function SwapWithSavings() {
     error,
     gasEstimate,
     sizeCategory,
-    estimatedGasLimit
+    estimatedGasLimit,
+    savingsPreview
   } = useSwapWithSavings(
     fromToken && toToken ? {
       fromToken: fromToken.symbol as 'ETH' | 'WETH' | 'USDC',
@@ -109,6 +98,24 @@ export default function SwapWithSavings() {
       setToAmount(estimatedOutput);
     }
   }, [estimatedOutput]);
+  
+  // Get actual swap amount function for SavingsSummary
+  const getActualSwapAmount = useCallback(() => {
+    return actualSwapAmount || fromAmount;
+  }, [actualSwapAmount, fromAmount]);
+  
+  // Get savings amount function for SavingsSummary
+  const calculateSavingsAmount = useCallback(() => {
+    return savingsPreview?.formattedAmount || savedAmount || '0';
+  }, [savingsPreview, savedAmount]);
+
+  // Show the Savings Preview if applicable
+  const showSavingsPreview = fromToken && 
+    strategy.isConfigured && 
+    !disableSavingsForThisSwap && 
+    fromAmount && 
+    parseFloat(fromAmount) > 0 &&
+    savingsPreview?.percentage > 0;
   
   // Handle token swap button
   const handleSwapTokens = () => {
@@ -338,6 +345,20 @@ export default function SwapWithSavings() {
     console.log('Saving strategy:', newStrategy);
     setShowStrategyModal(false);
   };
+
+  // Set initial tokens once loaded
+  useEffect(() => {
+    if (tokens && tokens.length > 0 && !fromToken && !toToken) {
+      try {
+        setFromToken(tokens[0]);
+        if (tokens.length > 1) {
+          setToToken(tokens[1]);
+        }
+      } catch (error) {
+        console.error("Error setting initial tokens:", error);
+      }
+    }
+  }, [tokens, fromToken, toToken]);
 
   if (isLoadingTokens || isLoadingStrategy) {
     return (
@@ -594,6 +615,40 @@ export default function SwapWithSavings() {
           )}>
             <div className="font-medium">Transaction Error</div>
             <div className="text-xs mt-1">{error.message || String(error)}</div>
+          </div>
+        )}
+        
+        {/* Swap Success Summary - Show after successful swap */}
+        {isSuccess && (
+          <SavingsSummary
+            fromToken={fromToken?.symbol || ''}
+            fromAmount={fromAmount}
+            toToken={toToken?.symbol || ''}
+            toAmount={toAmount}
+            getActualSwapAmount={getActualSwapAmount}
+            calculateSavingsAmount={calculateSavingsAmount}
+          />
+        )}
+        
+        {/* Show Savings Preview */}
+        {showSavingsPreview && (
+          <div className="mt-2 mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-sm font-medium text-blue-400">Savings Preview</h4>
+              <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">
+                {savingsPreview.percentage}% of swap
+              </span>
+            </div>
+            <div className="text-xs space-y-1">
+              <p>
+                <span className="text-gray-400">You'll save: </span>
+                <span className="text-white">{savingsPreview.formattedAmount} {fromToken?.symbol}</span>
+              </p>
+              <p>
+                <span className="text-gray-400">Actual swap amount: </span>
+                <span className="text-white">{actualSwapAmount} {fromToken?.symbol}</span>
+              </p>
+            </div>
           </div>
         )}
         

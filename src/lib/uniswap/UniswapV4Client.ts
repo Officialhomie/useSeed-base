@@ -68,7 +68,7 @@ export class UniswapV4Client {
 
   private getQuoterContract(): ethers.Contract {
     return new ethers.Contract(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_SEPOLIA_V4QUOTER,
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_V4QUOTER,
       V4QuoterABI,
       this.provider
     );

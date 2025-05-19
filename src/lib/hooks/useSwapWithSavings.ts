@@ -7,7 +7,8 @@ import { parseUnits, formatUnits } from 'viem';
 import { SpendSaveStrategy } from './useSpendSaveStrategy';
 import { calculateSavingsAmount } from '../utils/savingsCalculator';
 import { SupportedTokenSymbol, getTokenBySymbol } from '../uniswap/tokens';
-import { calculateV4SwapGasLimit } from '../uniswap/UniswapV4Integration';
+import { calculateV4SwapGasLimit, encodeSpendSaveHookData } from '../uniswap/UniswapV4Integration';
+import useSavingsPreview from './useSavingsPreview';
 
 // Transaction size thresholds in ETH
 const TX_SIZE_THRESHOLDS = {
@@ -43,6 +44,12 @@ interface SwapWithSavingsResult {
   gasEstimate: string;
   sizeCategory?: string;
   estimatedGasLimit: number;
+  savingsPreview: {
+    rawAmount: string;
+    formattedAmount: string;
+    percentage: number;
+    isEnabled: boolean;
+  };
 }
 
 /**
@@ -89,9 +96,10 @@ export default function useSwapWithSavings(
   const customGasPrice = props?.customGasPrice || null;
   const gasPriceCategory = props?.gasPriceCategory || 'safe';
 
-  // Calculate savings amount
-  const calculatedSavingsAmount = calculateSavingsAmount(
+  // Use our new savings preview hook
+  const savingsPreview = useSavingsPreview(
     amount,
+    fromToken,
     strategy,
     overridePercentage,
     disableSavings
@@ -99,7 +107,7 @@ export default function useSwapWithSavings(
 
   // Calculate actual swap amount (after savings deduction for INPUT type savings)
   const actualSwapAmount = strategy.savingsTokenType === 0 && !disableSavings && props && strategy.isConfigured
-    ? (parseFloat(amount) - parseFloat(calculatedSavingsAmount)).toString()
+    ? (parseFloat(amount) - parseFloat(savingsPreview.rawAmount)).toString()
     : amount;
 
   // Get quote using Uniswap SDK
@@ -356,6 +364,9 @@ export default function useSwapWithSavings(
       const slippageBps = Math.floor(slippage * 100); // convert pct to basis points
       
       try {
+        // Encode user address in hook data for SpendSaveHook
+        const hookData = encodeSpendSaveHookData(address as `0x${string}`);
+        
         const txResponse = await cliInstance.executeSwap({
           fromToken,
           toToken,
@@ -368,7 +379,7 @@ export default function useSwapWithSavings(
         const txHash = txResponse.hash as `0x${string}`;
         setTransactionHash(txHash);
         setExecutionStatus('pending');
-        setSavedAmount(calculatedSavingsAmount);
+        setSavedAmount(savingsPreview.rawAmount);
       } catch (swapError) {
         // Handle specific swap execution errors
         console.error("Swap execution error:", swapError);
@@ -430,6 +441,7 @@ export default function useSwapWithSavings(
     usingFallbackGas,
     gasEstimate,
     sizeCategory,
-    estimatedGasLimit
+    estimatedGasLimit,
+    savingsPreview
   };
 } 

@@ -3,6 +3,7 @@ import { Address } from 'viem';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { formatUnits } from 'viem';
 import { useAccount, useReadContract } from 'wagmi';
+import Link from 'next/link';
 
 interface SavingsSummaryProps {
   fromToken: string;
@@ -87,6 +88,10 @@ const SavingsSummary: React.FC<SavingsSummaryProps> = ({
   
   const isLoading = isLoadingSaved || isLoadingGoal;
   
+  // Get the current savings amount for this transaction
+  const currentSavingsAmount = calculateSavingsAmount();
+  const savingsIsActive = currentSavingsAmount && parseFloat(currentSavingsAmount) > 0;
+  
   if (isLoading) {
     return (
       <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
@@ -103,10 +108,14 @@ const SavingsSummary: React.FC<SavingsSummaryProps> = ({
           <span className="text-gray-400">Swapped: </span>
           <span className="text-white">{getActualSwapAmount()} {fromToken} → {toAmount} {toToken}</span>
         </p>
-        <p>
-          <span className="text-gray-400">Saved: </span>
-          <span className="text-white">{calculateSavingsAmount()} {fromToken}</span>
-        </p>
+        
+        {savingsIsActive && (
+          <p>
+            <span className="text-gray-400">Saved: </span>
+            <span className="text-white">{currentSavingsAmount} {fromToken}</span>
+          </p>
+        )}
+        
         <div className="pt-1 text-gray-400 text-xs">
           <p>You've now saved a total of <span className="text-white">{totalSaved} {fromToken}</span></p>
           
@@ -120,7 +129,7 @@ const SavingsSummary: React.FC<SavingsSummaryProps> = ({
           <p className="text-xs text-gray-500">{goalProgress.toFixed(1)}% towards your savings goal</p>
         </div>
         <p className="pt-1 text-green-400">
-          <a href="/app-dashboard/savings" className="underline">View your savings →</a>
+          <Link href="/app-dashboard/savings" className="underline">View your savings →</Link>
         </p>
       </div>
     </div>
