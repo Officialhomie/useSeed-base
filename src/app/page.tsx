@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import '../components/basename-explorer.css';
 import '../components/navigation-bar.css';
 import './page-styles.css';
@@ -11,19 +11,29 @@ import Subscribe from '@/components/Subscribe';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
+  const heroRef = useRef<HTMLDivElement>(null);
 
   // Handle hydration
   useEffect(() => {
     setMounted(true);
+
+    // Optional: Dynamically get hero background color and set as CSS variable
+    if (heroRef.current) {
+      const heroComputedStyle = window.getComputedStyle(heroRef.current);
+      const heroBgColor = heroComputedStyle.backgroundColor;
+      
+      // Set the hero-bg CSS variable
+      document.documentElement.style.setProperty('--hero-bg', heroBgColor);
+    }
   }, []);
 
   if (!mounted) return null;
 
   return (
-    <>
+    <div className="page-wrapper">
       <NavigationBar />
       <main className="main-content">
-        <section className="hero-section">
+        <section className="hero-section" ref={heroRef}>
           <div className="hero-content">
             <h1 className="hero-title">
               <span className="gradient-text">SpendSave</span> Protocol
@@ -181,7 +191,7 @@ export default function Home() {
           </div>
         </section>
       </main>
-    </>
+    </div>
   );
 }
 

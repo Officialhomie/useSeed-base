@@ -170,7 +170,7 @@ export default function useSwapWithSavings(
         try {
           console.info(`Quote attempt ${retryCount + 1} for ${fromToken} -> ${toToken} amount ${quoteAmount}`);
           const cli = await ensureClient();
-          const result = await cli.getSwapQuote(fromToken, toToken, quoteAmount);
+          const result = await cli.getQuote(fromToken, toToken, quoteAmount);
           const quote = result.quote;
           
           // Successfully got a quote

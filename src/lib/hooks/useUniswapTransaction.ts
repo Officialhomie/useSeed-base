@@ -86,7 +86,7 @@ export function useUniswapTransaction() {
       try {
         setQuoteState((s) => ({ ...s, loading: true, error: null }))
         const cli = await ensureClient()
-        const { quote, priceImpact } = await cli.getSwapQuote(from, to, amount)
+        const { quote, priceImpact } = await cli.getQuote(from, to, amount)
         setQuoteState({
           expectedOutput: quote.toExact(),
           priceImpact: priceImpact.toSignificant(2),
@@ -116,7 +116,7 @@ export function useUniswapTransaction() {
       try {
         setSwapState({ txHash: null, loading: true, error: null })
         const cli = await ensureClient()
-        const { quote, priceImpact } = await cli.getSwapQuote(
+        const { quote, priceImpact } = await cli.getQuote(
           params.fromToken,
           params.toToken,
           params.amount,

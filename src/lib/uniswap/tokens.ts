@@ -1,8 +1,8 @@
 import { Token, Ether } from '@uniswap/sdk-core'
 import { CONTRACT_ADDRESSES } from '../contracts'
 
-// Chain ID for Base Sepolia
-export const CHAIN_ID = 84532
+// Chain ID for Base Mainnet (was 84532 for Base Sepolia)
+export const CHAIN_ID = 8453
 
 // Native ETH representation using sdk-core helper
 export const NATIVE_ETH = {
@@ -121,4 +121,7 @@ export function addDAISupport(chainId: number) {
   }
   
   return false;
-} 
+}
+
+// Add DAI support for mainnet
+addDAISupport(CHAIN_ID); 

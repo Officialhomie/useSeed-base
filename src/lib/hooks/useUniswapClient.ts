@@ -33,9 +33,23 @@ export function useUniswapClient() {
             signer = (provider as ethers.providers.Web3Provider).getSigner();
           }
         } else {
-          // Fallback to RPC provider if no wallet is connected
-          // Use Base Sepolia RPC URL
-          provider = new ethers.providers.JsonRpcProvider('https://sepolia.base.org');
+          // Fallback to reliable public RPCs - avoid localhosts
+          const fallbackRpcs = [
+            'https://mainnet.base.org', 
+            'https://base-mainnet-rpc.publicnode.com'
+          ];
+          
+          try {
+            // Try creating a FallbackProvider with multiple RPCs for reliability
+            const providers = fallbackRpcs.map(url => 
+              new ethers.providers.JsonRpcProvider(url)
+            );
+            provider = new ethers.providers.FallbackProvider(providers, 1);
+          } catch (fallbackError) {
+            // If FallbackProvider fails, use a single RPC
+            console.warn('FallbackProvider creation failed, using single RPC', fallbackError);
+            provider = new ethers.providers.JsonRpcProvider('https://mainnet.base.org');
+          }
         }
         
         // Create client with proper API key from env
@@ -44,7 +58,7 @@ export function useUniswapClient() {
           console.warn('No BaseScan API key found in environment variables (NEXT_PUBLIC_BASESCAN_API_KEY)');
         }
         
-        const newClient = new UniswapV4Client(provider, signer);
+        const newClient = new UniswapV4Client(provider, signer || undefined);
         
         // Initialize with address if available
         if (address) {
@@ -60,8 +74,9 @@ export function useUniswapClient() {
         console.error('Error creating UniswapV4Client:', err);
         // Fall back to RPC provider in case of window.ethereum errors
         try {
-          provider = new ethers.providers.JsonRpcProvider('https://sepolia.base.org');
-          const newClient = new UniswapV4Client(provider, null);
+          // Use mainnet.base.org directly to avoid potential localhost default
+          provider = new ethers.providers.JsonRpcProvider('https://mainnet.base.org');
+          const newClient = new UniswapV4Client(provider, undefined);
           setClient(newClient);
           setError(new Error(`Using read-only connection: ${err instanceof Error ? err.message : String(err)}`));
         } catch (fallbackErr) {
@@ -70,8 +85,8 @@ export function useUniswapClient() {
       }
     } else {
       // Server-side rendering - create dummy client
-      provider = new ethers.providers.JsonRpcProvider('https://sepolia.base.org');
-      const newClient = new UniswapV4Client(provider, null);
+      provider = new ethers.providers.JsonRpcProvider('https://mainnet.base.org');
+      const newClient = new UniswapV4Client(provider, undefined);
       setClient(newClient);
     }
 

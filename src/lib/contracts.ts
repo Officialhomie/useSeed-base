@@ -1,5 +1,5 @@
 import { createPublicClient, Address, Hex, http, Chain, getContract } from "viem";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { spendPermissionManagerAbi, spendPermissionManagerAddress } from "./abi/SpendPermissionManager";
 
@@ -17,16 +17,16 @@ export const CONTRACT_ADDRESSES = {
   SLIPPAGE_CONTROL: "0x23432eA9F072f1f279e155e491d9AE046f4D7cC4" as Address,
   TOKEN: "0xDd68A972612900DC5c25f3C643a1d85C9B69b8F4" as Address,
 
-  UNISWAP_BASE_MAINNET_POOL_MANAGER: "0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408" as Address,
-  UNISWAP_BASE_MAINNET_UNIVERSAL_ROUTER: "0x492e6456d9528771018deb9e87ef7750ef184104" as Address,
+  UNISWAP_BASE_MAINNET_POOL_MANAGER: "0x498581ff718922c3f8e6a244956af099b2652b2b" as Address,
+  UNISWAP_BASE_MAINNET_UNIVERSAL_ROUTER: "0x6ff5693b99212da76ad316178a184ab56d299b43" as Address,
   UNISWAP_BASE_MAINNET_POOL_SWAP_TEST: "0x8b5bcc363dde2614281ad875bad385e0a785d3b9" as Address,
-  UNISWAP_BASE_MAINNET_V4QUOTER: "0x4a6513c898fe1b2d0e78d3b0e0a4a151589b1cba" as Address,
-  UNISWAP_BASE_MAINNET_STATE_VIEW: "0x571291b572ed32ce6751a2Cb2486EbEe8DEfB9B4" as Address,
+  UNISWAP_BASE_MAINNET_V4QUOTER: "0x0d5e0f971ed27fbff6c2837bf31316121532048d" as Address,
+  UNISWAP_BASE_MAINNET_STATE_VIEW: "0xa3c0c9b65bad0b08107aa264b0f3db444b867a71" as Address,
   // Common token addresses
-  ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address,
-  USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address, // Base Sepolia USDC
-  WETH: "0x4200000000000000000000000000000000000006" as Address, // Base Sepolia WETH
-  // DAI: "0x7d90bb8638Eed8d8D7624643927fBc9984750360" as Address, // Base Sepolia DAI - Removed as it doesn't exist on Base Sepolia
+  ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address, // ETH address stays the same
+  USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address, // Base Mainnet USDC
+  WETH: "0x4200000000000000000000000000000000000006" as Address, // Base Mainnet WETH (same as Sepolia)
+  DAI: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb" as Address, // Base Mainnet DAI
 } as const;
 
 // Import ABIs
@@ -40,7 +40,7 @@ import spendSaveHookAbi from "../ABI/SpendSaveHook.json";
 import tokenAbi from "../ABI/Token.json";
 
 // Initialize public client
-export const getPublicClient = (chain: Chain = baseSepolia) => {
+export const getPublicClient = (chain: Chain = base) => {
   return createPublicClient({
     chain,
     transport: http(),
@@ -51,7 +51,7 @@ export const getPublicClient = (chain: Chain = baseSepolia) => {
 export const getContractInstance = (
   address: Address,
   abi: any,
-  chain: Chain = baseSepolia
+  chain: Chain = base
 ) => {
   const publicClient = getPublicClient(chain);
   return getContract({
@@ -62,7 +62,7 @@ export const getContractInstance = (
 };
 
 // Get contract instances
-export const getContracts = (chain: Chain = baseSepolia) => {
+export const getContracts = (chain: Chain = base) => {
   return {
     spendPermissionManager: getContractInstance(
       CONTRACT_ADDRESSES.SPEND_PERMISSION_MANAGER,
@@ -110,13 +110,13 @@ export const getContracts = (chain: Chain = baseSepolia) => {
 // Helper for token contract instances
 export const getTokenContract = (
   tokenAddress: Address,
-  chain: Chain = baseSepolia
+  chain: Chain = base
 ) => {
   return getContractInstance(tokenAddress, tokenAbi, chain);
 };
 
 // Get spender wallet client (for backend operations)
-export async function getSpenderWalletClient(chain: Chain = baseSepolia) {
+export async function getSpenderWalletClient(chain: Chain = base) {
   const spenderAccount = privateKeyToAccount(
     process.env.SPENDER_PRIVATE_KEY! as Hex
   );

@@ -1,6 +1,14 @@
 /* SpendSave Protocol Main Page Styles */
 
+.page-wrapper {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
 .main-content {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   background: linear-gradient(to bottom, #050505, #111927);
   color: white;
@@ -9,6 +17,11 @@
 
 /* Hero section */
 .hero-section {
+  background-color: var(--hero-bg, #111827);
+  position: relative;
+  padding-top: 100px; /* Increased top padding to accommodate the floating navbar */
+  overflow: hidden;
+  min-height: 85vh;
   display: flex;
   flex-direction: column;
   max-width: 1200px;

@@ -7,7 +7,7 @@ export const cbWalletConnector = coinbaseWallet({
   appName: "SpendSave Protocol",
   appLogoUrl: "/logo.png", // Optional logo URL
   preference: "all", // Allow all wallet types (EOA and Smart Wallets)
-  chainId: baseSepolia.id, // Default chain ID
+  chainId: base.id, // Default to Base mainnet
 });
 
 // Configure debugger for development
@@ -133,12 +133,19 @@ const baseMainnetTransports = [
       mode: 'cors',
       cache: 'no-cache',
     }
+  }),
+  // Local proxy option if direct access fails
+  http('/api/rpc/base', { 
+    timeout: 8000,
+    fetchOptions: {
+      mode: 'same-origin',
+    }
   })
 ].filter(Boolean) as ReturnType<typeof http>[];
 
 // Create the Wagmi config with our transports
 export const config = createConfig({
-  chains: [baseSepolia, base],
+  chains: [base, baseSepolia], // Keep base first to prioritize it
   connectors: [
     cbWalletConnector,
   ],

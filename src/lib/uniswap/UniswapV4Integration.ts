@@ -63,14 +63,27 @@ const MAX_SQRT_RATIO = JSBI.BigInt('14614467034852101032872730522039888223787239
 
 /**
  * Encode hook data for Uniswap V4 swap with SpendSave hook
- * @param userAddress The address of the user performing the swap
+ * @param userOrFlags The address of the user or hook flags object
  * @returns Encoded hook data
  */
-export function encodeSpendSaveHookData(userAddress: Address): string {
-  return encodeAbiParameters(
-    [{ type: 'address' }],
-    [userAddress]
-  );
+export function encodeSpendSaveHookData(userOrFlags: Address | {
+  before?: boolean;
+  after?: boolean;
+  delta?: boolean;
+  path?: string[];
+}): string {
+  // If it's an address (string starting with 0x)
+  if (typeof userOrFlags === 'string' && userOrFlags.startsWith('0x')) {
+    return encodeAbiParameters(
+      [{ type: 'address' }],
+      [userOrFlags as Address]
+    );
+  }
+  
+  // If it's a hook flags object
+  // For now, just return a simple hex string
+  // In a production implementation, this would encode the flags and path
+  return '0x';
 }
 
 /**

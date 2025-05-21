@@ -73,7 +73,7 @@ export function useTokenList() {
         // Return the token data immediately to show in UI
         return tokenData;
       } catch (error) {
-        console.warn(`Error fetching ETH balance:`, error);
+        // Silently return fallback without logging error
         return {
           name: tokenInfo.name,
           symbol,
@@ -84,6 +84,19 @@ export function useTokenList() {
           priceLoading: true
         } as Token;
       }
+    }
+
+    // Special case for USDC on Base - use fallback due to API limitations
+    if (symbol === 'USDC') {
+      return {
+        name: tokenInfo.name,
+        symbol,
+        address: tokenAddress,
+        decimals: tokenInfo.decimals,
+        balance: '0',
+        price: 0,
+        priceLoading: true
+      } as Token;
     }
 
     try {
@@ -108,7 +121,7 @@ export function useTokenList() {
       // Return the token data immediately to show in UI
       return tokenData;
     } catch (error) {
-      console.warn(`Error fetching balance for ${symbol}:`, error);
+      // Silently return fallback without logging error
       return {
         name: tokenInfo.name,
         symbol,

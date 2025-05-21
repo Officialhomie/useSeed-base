@@ -5,6 +5,8 @@ import { useState, type ReactNode, useEffect } from "react";
 import { WagmiProvider } from "wagmi";
 import { config } from "../../wagmi";
 import NotificationProvider from '@/components/NotificationManager';
+import { OnchainKitProvider } from '@coinbase/onchainkit';
+import { base } from 'wagmi/chains';
 
 // Non-blocking wallet connection indicator
 const WalletConnectionStatus = ({ status }: { status: 'connecting' | 'failed' | 'connected' | 'timeout' }): JSX.Element | null => {
@@ -292,14 +294,26 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
         </button>
       </div>
     }>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <NotificationProvider>
-            <WalletConnectionStatus status={walletStatus} />
-            {children}
-          </NotificationProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
+      <OnchainKitProvider
+        apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY!}
+        chain={base}
+        config={{
+          appearance: {
+            name: 'Base Seeds Protocol',
+            mode: 'auto',
+            theme: 'default',
+          },
+        }}
+      >
+        <WagmiProvider config={config}>
+          <QueryClientProvider client={queryClient}>
+            <NotificationProvider>
+              <WalletConnectionStatus status={walletStatus} />
+              {children}
+            </NotificationProvider>
+          </QueryClientProvider>
+        </WagmiProvider>
+      </OnchainKitProvider>
     </ErrorBoundary>
   );
 } 

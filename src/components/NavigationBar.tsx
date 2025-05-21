@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import './navigation-bar.css';
 import SpendSaveWallet from './SpendSaveWallet';
+import { FiHome, FiBarChart2, FiPieChart } from 'react-icons/fi';
 
 export default function NavigationBar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState('home');
+  const [activeSection, setActiveSection] = useState('dashboard');
+  const [isPressed, setIsPressed] = useState(false);
   
   // Handle scroll effect for the navigation bar
   useEffect(() => {
@@ -27,124 +29,89 @@ export default function NavigationBar() {
     };
   }, []);
 
+  // Mouse down and up handlers for the squeeze effect
+  const handleMouseDown = () => {
+    setIsPressed(true);
+  };
+
+  const handleMouseUp = () => {
+    setIsPressed(false);
+  };
+
   // Toggle mobile menu
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
+  // Navigation links data - simplified
+  const navLinks = [
+    { id: 'dashboard', label: 'Dashboard', href: '/', icon: <FiHome /> },
+    { id: 'exchange', label: 'Exchange', href: '/exchange', icon: <FiBarChart2 /> },
+    { id: 'staking', label: 'Staking', href: '/staking', icon: <FiPieChart /> },
+  ];
+
   return (
-    <nav className={`spendSave-navbar ${scrolled ? 'scrolled' : ''}`}>
-      <div className="navbar-container">
-        <div className="navbar-logo">
-          <div className="logo-hexagon">
-            <div className="logo-inner">
+    <div className="navbar-container-wrapper">
+      <nav 
+        className={`spendSave-navbar ${scrolled ? 'scrolled' : ''} ${isPressed ? 'pressed' : ''}`}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => setIsPressed(false)}
+        onTouchStart={handleMouseDown}
+        onTouchEnd={handleMouseUp}
+        role="navigation"
+        aria-label="Main navigation"
+      >
+        <div className="navbar-container">
+          {/* Logo */}
+          <div className="navbar-logo">
+            <div className="logo-pill">
               <span className="logo-text">S²</span>
             </div>
+            <h1 className="logo-title">SpendSave</h1>
           </div>
-          <h1 className="logo-title">SpendSave</h1>
-          <div className="logo-pill">Protocol</div>
-        </div>
-        
-        <button className="mobile-menu-toggle" onClick={toggleMobileMenu}>
-          <div className={`menu-icon ${mobileMenuOpen ? 'open' : ''}`}>
-            <span></span>
-            <span></span>
-            <span></span>
+          
+          {/* Mobile menu toggle */}
+          <button 
+            className="mobile-menu-toggle" 
+            onClick={toggleMobileMenu} 
+            aria-label="Toggle menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            <div className={`menu-icon ${mobileMenuOpen ? 'open' : ''}`}>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </button>
+          
+          {/* Navigation links - simplified */}
+          <div className={`navbar-links ${mobileMenuOpen ? 'open' : ''}`}>
+            <ul>
+              {navLinks.map((link) => (
+                <li key={link.id} className={activeSection === link.id ? 'active' : ''}>
+                  <Link 
+                    href={link.href} 
+                    onClick={() => {
+                      setActiveSection(link.id);
+                      setMobileMenuOpen(false);
+                    }}
+                    aria-current={activeSection === link.id ? 'page' : undefined}
+                  >
+                    <span className="nav-link-icon">{link.icon}</span>
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
-        </button>
-        
-        <div className={`navbar-links ${mobileMenuOpen ? 'open' : ''}`}>
-          <ul>
-            <li className={activeSection === 'home' ? 'active' : ''}>
-              <Link href="/" onClick={() => setActiveSection('home')}>
-                Home
-                <div className="nav-indicator"></div>
-              </Link>
-            </li>
-            <li className={activeSection === 'features' ? 'active' : ''}>
-              <Link href="/features" onClick={() => setActiveSection('features')}>
-                Features
-                <div className="nav-indicator"></div>
-              </Link>
-            </li>
-            <li className={activeSection === 'protocol' ? 'active' : ''}>
-              <Link href="/protocol" onClick={() => setActiveSection('protocol')}>
-                Protocol
-                <div className="nav-indicator"></div>
-              </Link>
-            </li>
-            <li className={activeSection === 'balances' ? 'active' : ''}>
-              <Link href="/balances" onClick={() => setActiveSection('balances')}>
-                Balances
-                <div className="nav-indicator"></div>
-              </Link>
-            </li>
-            <li className={activeSection === 'docs' ? 'active' : ''}>
-              <Link href="/docs" onClick={() => setActiveSection('docs')}>
-                Documentation
-                <div className="nav-indicator"></div>
-              </Link>
-            </li>
-            <li className={activeSection === 'profiles' ? 'active' : ''}>
-              <Link href="/profiles" onClick={() => setActiveSection('profiles')}>
-                Profiles
-                <div className="nav-indicator"></div>
-              </Link>
-            </li>
-          </ul>
-        </div>
-        
-        <div className="navbar-actions">
-          <SpendSaveWallet />
-        </div>
-      </div>
-      
-      {/* DeFi Stats Ticker */}
-      <div className="defi-stats-ticker">
-        <div className="ticker-wrapper">
-          <div className="ticker-content">
-            <div className="ticker-item">
-              <span className="ticker-label">Total Saved:</span>
-              <span className="ticker-value">$4.2M</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">Active Savers:</span>
-              <span className="ticker-value">12.4K</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">Avg. Savings Rate:</span>
-              <span className="ticker-value">3.2%</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">DCA Volume:</span>
-              <span className="ticker-value">$850K</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">Total Saved:</span>
-              <span className="ticker-value">$4.2M</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">Active Savers:</span>
-              <span className="ticker-value">12.4K</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">Avg. Savings Rate:</span>
-              <span className="ticker-value">3.2%</span>
-            </div>
-            <div className="ticker-divider"></div>
-            <div className="ticker-item">
-              <span className="ticker-label">DCA Volume:</span>
-              <span className="ticker-value">$850K</span>
-            </div>
+          
+          {/* Wallet integration */}
+          <div className="navbar-actions">
+            <SpendSaveWallet />
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </div>
   );
 } 
