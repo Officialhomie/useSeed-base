@@ -127,11 +127,6 @@ export const getContracts = (chain: Chain = base) => {
       universalRouterAbi,
       chain
     ),
-    uniswapPoolSwapTest: getContractInstance(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_SWAP_TEST,
-      poolSwapTestAbi,
-      chain
-    ),
     uniswapV4Quoter: getContractInstance(
       CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_V4QUOTER,
       v4QuoterAbi,
