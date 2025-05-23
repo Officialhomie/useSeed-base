@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccount, useWaitForTransactionReceipt } from 'wagmi';
-import { parseUnits, formatUnits } from 'viem';
+import { parseUnits } from 'viem';
 import { useEthersSigner } from './useEthersSigner';
 import { getEthersProvider } from '../utils/ethersAdapter';
 import { UniswapV4Client } from '../uniswap/UniswapV4Client';
@@ -50,7 +50,6 @@ interface SwapWithSavingsResult {
   transactionHash: `0x${string}` | null;
   savedAmount: string;
   actualSwapAmount: string;
-  estimatedOutput: string;
   executeSwap: () => Promise<void>;
   isLoading: boolean;
   isSuccess: boolean;
@@ -81,13 +80,6 @@ interface SwapWithSavingsResult {
   canProceedWithApprovals: boolean;
 }
 
-// ========== CONSTANTS ==========
-const TX_SIZE_THRESHOLDS = {
-  MICRO: 0.001,
-  SMALL: 0.01,
-  MEDIUM: 0.1
-};
-
 /**
  * Custom hook for swapping tokens with integrated savings and approval management
  */
@@ -101,7 +93,6 @@ export default function useSwapWithSavings(
   const [executionStatus, setExecutionStatus] = useState<SwapWithSavingsResult['executionStatus']>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [savedAmount, setSavedAmount] = useState('0');
-  const [estimatedOutput, setEstimatedOutput] = useState('0');
   const [transactionHash, setTransactionHash] = useState<`0x${string}` | null>(null);
   const [usingFallbackGas, setUsingFallbackGas] = useState(false);
   const [gasEstimate, setGasEstimate] = useState('0');
@@ -142,7 +133,7 @@ export default function useSwapWithSavings(
   // Get token info for approvals
   const fromTokenInfo = props ? getTokenBySymbol(props.fromToken) : null;
 
-  // ========== PHASE 3: APPROVAL MANAGEMENT ==========
+  // ========== APPROVAL MANAGEMENT ==========
   const {
     approvalState,
     approvalStatus, 
@@ -362,154 +353,6 @@ export default function useSwapWithSavings(
     }
   }, [address, signer, getSavingStrategyContract, validateStrategy]);
 
-  // ========== QUOTE FETCHING ==========
-  useEffect(() => {
-    const fetchQuote = async (): Promise<void> => {
-      if (!props || !address || !amount || parseFloat(amount) <= 0) return;
-
-      try {
-        const fromTokenInfo = getTokenBySymbol(fromToken);
-        const toTokenInfo = getTokenBySymbol(toToken);
-        
-        if (!fromTokenInfo || !toTokenInfo) {
-          throw new Error('Invalid token configuration');
-        }
-
-        // For very small transactions, use approximated pricing immediately
-        if (parseFloat(actualSwapAmount) < TX_SIZE_THRESHOLDS.MICRO) {
-          console.info('Using fixed price estimate for micro transaction');
-          provideFallbackQuote(fromToken, toToken, actualSwapAmount);
-          return;
-        }
-
-        // For small amounts, use a minimum for quotation then scale back
-        let quoteAmount = actualSwapAmount;
-        const actualAmountFloat = parseFloat(actualSwapAmount);
-        let needsScaling = false;
-        
-        if (actualAmountFloat > 0 && actualAmountFloat < TX_SIZE_THRESHOLDS.SMALL) {
-          needsScaling = true;
-          quoteAmount = TX_SIZE_THRESHOLDS.SMALL.toString();
-          console.info('Using minimum amount for quote, will scale result');
-        }
-        
-        await processQuoteWithRetries(quoteAmount, needsScaling, actualAmountFloat, toTokenInfo);
-      } catch (err) {
-        console.warn('All quote attempts failed, using fallback approximation:', err);
-        provideFallbackQuote(fromToken, toToken, actualSwapAmount);
-      }
-    };
-
-    const processQuoteWithRetries = async (
-      quoteAmount: string, 
-      needsScaling: boolean, 
-      actualAmountFloat: number,
-      toTokenInfo: any
-    ) => {
-      let retryCount = 0;
-      const maxRetries = 3;
-      
-      while (retryCount < maxRetries) {
-        try {
-          console.info(`Quote attempt ${retryCount + 1} for ${fromToken} -> ${toToken} amount ${quoteAmount}`);
-          const cli = await ensureClient();
-          const result = await cli.getQuote(fromToken, toToken, quoteAmount);
-          const quote = result.quote;
-          
-          let rawOut = BigInt(quote.quotient.toString());
-
-          if (needsScaling) {
-            try {
-              const scaleFactor = actualAmountFloat / TX_SIZE_THRESHOLDS.SMALL;
-              rawOut = BigInt(Math.floor(Number(rawOut) * scaleFactor));
-            } catch (scaleErr) {
-              console.warn("Error scaling quote result:", scaleErr);
-            }
-          }
-
-          setEstimatedOutput(formatUnits(rawOut, toTokenInfo.decimals));
-          return;
-        } catch (err) {
-          retryCount++;
-          
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          
-          if (errorMessage.includes('currency.equals is not a function') ||
-              errorMessage.includes('sending a transaction requires a signer')) {
-            console.warn(`Quote attempt ${retryCount} failed with API issue, skipping to fallback:`, err);
-            break;
-          }
-          
-          console.warn(`Quote attempt ${retryCount} failed:`, err);
-          
-          if (retryCount >= maxRetries) {
-            throw err;
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, retryCount)));
-        }
-      }
-      
-      throw new Error('Failed to get quote after multiple attempts');
-    };
-
-    const provideFallbackQuote = (
-      fromToken: SupportedTokenSymbol,
-      toToken: SupportedTokenSymbol,
-      amount: string
-    ) => {
-      let fallbackEstimate = '0';
-      const amountFloat = parseFloat(amount);
-
-      if (fromToken === 'ETH') {
-        const APPROX_ETH_PRICE = 2500;
-        
-        if (toToken === 'USDC') {
-          fallbackEstimate = (amountFloat * APPROX_ETH_PRICE).toFixed(6);
-        } else if (toToken === 'WETH') {
-          fallbackEstimate = amount;
-        }
-      } else if (toToken === 'ETH' || toToken === 'WETH') {
-        const APPROX_TOKEN_PRICES: Record<string, number> = {
-          'USDC': 1/2500,
-        };
-        
-        const tokenPrice = APPROX_TOKEN_PRICES[fromToken as 'USDC'];
-        if (tokenPrice) {
-          fallbackEstimate = (amountFloat * tokenPrice).toFixed(18);
-        }
-      }
-      
-      if (fallbackEstimate !== '0') {
-        console.info(`Using fallback price estimate for ${fromToken}->${toToken}: ${fallbackEstimate}`);
-        setEstimatedOutput(fallbackEstimate);
-        setUsingFallbackGas(true);
-      } else {
-        console.warn(`No specific fallback for ${fromToken}->${toToken}, using 1:1 rate`);
-        setEstimatedOutput(amount);
-        setUsingFallbackGas(true);
-      }
-    };
-
-    const debounceTimeout = 800;
-    const timerId = address && fromToken && toToken && amount && parseFloat(amount) > 0 
-      ? setTimeout(fetchQuote, debounceTimeout)
-      : undefined;
-    
-    return () => {
-      if (timerId) clearTimeout(timerId);
-    };
-  }, [
-    address, 
-    fromToken, 
-    toToken, 
-    amount && parseFloat(amount) > 0 ? parseFloat(amount).toFixed(4) : "0",
-    strategy.isConfigured && !disableSavings ? strategy.currentPercentage : 0,
-    disableSavings,
-    actualSwapAmount,
-    ensureClient
-  ]);
-
   // ========== VALIDATION EFFECTS ==========
   useEffect(() => {
     if (props && fromToken === toToken) {
@@ -533,13 +376,46 @@ export default function useSwapWithSavings(
     }
   }, [address, disableSavings, validateStrategy, props]);
 
+  // ========== GAS ESTIMATION EFFECT ==========
+  useEffect(() => {
+    if (!props || !amount || parseFloat(amount) <= 0) return;
+
+    const valueToSend = fromToken === 'ETH' ? BigInt(parseUnits(amount, 18)) : BigInt(0);
+    
+    const { gasLimit, usingFallback, sizeCategory: txSizeCategory } = calculateV4SwapGasLimit({
+      fromToken,
+      toToken,
+      value: valueToSend,
+      savingsTokenType: strategy.savingsTokenType,
+      enableDCA: strategy.enableDCA,
+      disableSavings
+    });
+
+    const gasPrice = BigInt(30) * BigInt(1000000000); // 30 gwei
+    const gasEstimateWei = gasLimit * gasPrice;
+    const gasEstimateEth = (Number(gasEstimateWei) / 1e18).toString();
+    
+    setEstimatedGasLimit(Number(gasLimit));
+    setUsingFallbackGas(usingFallback);
+    setGasEstimate(gasEstimateEth);
+    setSizeCategory(txSizeCategory);
+  }, [
+    props,
+    fromToken,
+    toToken,
+    amount,
+    strategy.savingsTokenType,
+    strategy.enableDCA,
+    disableSavings
+  ]);
+
   // ========== MAIN SWAP EXECUTION ==========
   const executeSwapFunction = async () => {
     if (!props || !address || !amount || parseFloat(amount) <= 0) {
       throw new Error('Invalid swap parameters');
     }
 
-    // PHASE 2: Pre-Swap Strategy Validation
+    // Strategy validation
     setExecutionStatus('validating-strategy');
     const currentValidation = await validateStrategy();
     setStrategyValidation(currentValidation);
@@ -548,16 +424,16 @@ export default function useSwapWithSavings(
       const errorMsg = currentValidation.errors.length > 0 
         ? currentValidation.errors.join(' ') 
         : 'Strategy validation failed';
-      throw new Error(`PHASE 2 Strategy Error: ${errorMsg}`);
+      throw new Error(`Strategy Error: ${errorMsg}`);
     }
     
     if (currentValidation.warnings.length > 0) {
-      console.warn('PHASE 2 Strategy Warnings:', currentValidation.warnings);
+      console.warn('Strategy Warnings:', currentValidation.warnings);
     }
 
-    // PHASE 3: Pre-Swap Approval Validation
+    // Approval validation
     if (needsApprovals && !canProceedWithApprovals) {
-      throw new Error(`PHASE 3 Approval Error: Token approvals required for swapping and savings functionality`);
+      throw new Error(`Approval Error: Token approvals required for swapping and savings functionality`);
     }
 
     setExecutionStatus('preparing');
@@ -572,30 +448,11 @@ export default function useSwapWithSavings(
       throw new Error('Invalid from token');
     }
 
-    const valueToSend = fromToken === 'ETH' ? BigInt(parseUnits(amount, 18)) : BigInt(0);
     const cliInstance = await ensureClient();
     
     if (!cliInstance.signer) {
       throw new Error('Signer not available. Please reconnect your wallet.');
     }
-
-    const { gasLimit, usingFallback, sizeCategory: txSizeCategory } = calculateV4SwapGasLimit({
-      fromToken,
-      toToken,
-      value: valueToSend,
-      savingsTokenType: strategy.savingsTokenType,
-      enableDCA: strategy.enableDCA,
-      disableSavings
-    });
-
-    const gasPrice = BigInt(30) * BigInt(1000000000);
-    const gasEstimateWei = gasLimit * gasPrice;
-    const gasEstimateEth = formatUnits(gasEstimateWei, 18);
-    
-    setEstimatedGasLimit(Number(gasLimit));
-    setUsingFallbackGas(usingFallback);
-    setGasEstimate(gasEstimateEth);
-    setSizeCategory(txSizeCategory);
 
     try {
       const slippageBps = Math.floor(slippage * 100);
@@ -638,7 +495,6 @@ export default function useSwapWithSavings(
     transactionHash,
     savedAmount,
     actualSwapAmount,
-    estimatedOutput,
     executeSwap: executeSwapFunction,
     isLoading,
     isSuccess,

@@ -6,13 +6,6 @@ import { SupportedTokenSymbol } from '../uniswap/tokens'
 import { computeDynamicSlippage } from '../slippage/computeDynamicSlippage'
 import { useAccount } from 'wagmi'
 
-interface QuoteState {
-  expectedOutput: string | null
-  priceImpact: string | null
-  loading: boolean
-  error: Error | null
-}
-
 interface SwapState {
   txHash: string | null
   loading: boolean
@@ -23,13 +16,6 @@ export function useUniswapTransaction() {
   const { signer, isLoading: signerLoading, error: signerError } = useEthersSigner()
   const { address } = useAccount()
   const [client, setClient] = useState<UniswapV4Client | null>(null)
-
-  const [quoteState, setQuoteState] = useState<QuoteState>({
-    expectedOutput: null,
-    priceImpact: null,
-    loading: false,
-    error: null,
-  })
 
   const [swapState, setSwapState] = useState<SwapState>({
     txHash: null,
@@ -79,28 +65,6 @@ export function useUniswapTransaction() {
   }, [client, signer, address])
 
   /**
-   * Get swap quote
-   */
-  const getQuote = useCallback(
-    async (from: SupportedTokenSymbol, to: SupportedTokenSymbol, amount: string) => {
-      try {
-        setQuoteState((s) => ({ ...s, loading: true, error: null }))
-        const cli = await ensureClient()
-        const { quote, priceImpact } = await cli.getQuote(from, to, amount)
-        setQuoteState({
-          expectedOutput: quote.toExact(),
-          priceImpact: priceImpact.toSignificant(2),
-          loading: false,
-          error: null,
-        })
-      } catch (e) {
-        setQuoteState({ expectedOutput: null, priceImpact: null, loading: false, error: e as Error })
-      }
-    },
-    [ensureClient],
-  )
-
-  /**
    * Execute swap
    */
   const executeSwap = useCallback(
@@ -116,21 +80,12 @@ export function useUniswapTransaction() {
       try {
         setSwapState({ txHash: null, loading: true, error: null })
         const cli = await ensureClient()
-        const { quote, priceImpact } = await cli.getQuote(
-          params.fromToken,
-          params.toToken,
-          params.amount,
-        )
 
         let slippageBps: number | undefined
         if (params.slippage === 'auto') {
-          // use fresh quote's price impact when available, else fallback to stored state
-          const impact = priceImpact
-            ? parseFloat(priceImpact.toSignificant(2))
-            : quoteState.priceImpact
-              ? parseFloat(quoteState.priceImpact)
-              : 0.5
-          const priceImpactBps = impact * 100
+          // Use a reasonable default for auto slippage since we don't have quotes
+          const defaultPriceImpact = 0.5; // 0.5% default
+          const priceImpactBps = defaultPriceImpact * 100
           slippageBps = computeDynamicSlippage(priceImpactBps)
         } else if (typeof params.slippage === 'number') {
           slippageBps = params.slippage
@@ -152,15 +107,13 @@ export function useUniswapTransaction() {
         throw e
       }
     },
-    [ensureClient, quoteState.priceImpact],
+    [ensureClient],
   )
 
   return {
-    quoteState,
     swapState,
-    getQuote,
     executeSwap,
     signerLoading,
     signerError,
   }
-} 
+}

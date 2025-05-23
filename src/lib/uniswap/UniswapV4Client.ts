@@ -1,10 +1,9 @@
 import { ethers } from 'ethers'
-import JSBI from 'jsbi'
+import JSBI from "jsbi"
 import {
   Pool,
   Route,
   Trade as V4Trade,
-  V4Planner,
   tickToPrice,
 } from '@uniswap/v4-sdk'
 import {
@@ -23,22 +22,8 @@ import {
 import { encodeSpendSaveHookData } from './UniswapV4Integration'
 import { getSqrtPriceLimit } from './UniswapV4Integration'
 import type { HookFlags } from './types'
-import V4QuoterABI from '@/ABI/V4Quoter.json'
 import PoolManagerAbi from '@/abi/core/PoolManager.json'
 import { BaseScanClient } from '../basescan/BaseScanClient'
-
-export interface QuoteResult {
-  quoteType?: 'CONTRACT' | 'SDK' | 'SIMULATION' | 'DIRECT'
-  amountIn?: string
-  amountOut?: string
-  sqrtPriceX96After?: string
-  initializedTicksCrossed?: number
-  gasEstimate?: string
-  quote: CurrencyAmount<Token>
-  route: Route<Token, Token>
-  priceImpact: Percent
-  trade: V4Trade<Token, Token, TradeType>
-}
 
 // Create a custom tick data provider to avoid "No tick data provider was given" error
 class SimpleTickDataProvider {
@@ -228,14 +213,6 @@ export class UniswapV4Client {
     }
   }
 
-  private getQuoterContract(): ethers.Contract {
-    return new ethers.Contract(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_V4QUOTER,
-      V4QuoterABI,
-      this.provider
-    );
-  }
-
   /**
    * Helper to ensure tokens are proper instances
    */
@@ -288,294 +265,6 @@ export class UniswapV4Client {
       : [tokenB, tokenA];
   }
 
-  /**
-   * Debug helper to check token instances
-   */
-  private logTokenDetails(token: any, label: string) {
-    console.log(`${label} token details:`, {
-      address: token.address,
-      decimals: token.decimals,
-      symbol: token.symbol,
-      isToken: token instanceof Token,
-      hasEquals: typeof token.equals === 'function'
-    });
-    
-    if (token instanceof Token) {
-      try {
-        // Test the equals method
-        const sameToken = new Token(
-          CHAIN_ID,
-          token.address,
-          token.decimals,
-          token.symbol || 'TEST',
-          token.name || 'Test Token'
-        );
-        console.log(`${label} equals test:`, token.equals(sameToken));
-      } catch (error) {
-        console.error(`${label} equals test failed:`, error);
-      }
-    }
-  }
-
-  /**
-   * Helper to create a proper trade object without type errors
-   */
-  private createProperTrade(
-    route: Route<Token, Token>,
-    inputAmount: CurrencyAmount<Token>,
-    outputAmount: CurrencyAmount<Token>,
-    tradeType: TradeType
-  ): V4Trade<Token, Token, TradeType> {
-    // Use the unchecked trade creation to avoid validation errors
-    return V4Trade.createUncheckedTrade({
-      route,
-      inputAmount,
-      outputAmount,
-      tradeType
-    }) as V4Trade<Token, Token, TradeType>;
-  }
-
-  /**
-   * Call the V4Quoter contract and format the result
-   */
-  private async getQuoteFromContract(
-    inputToken: Token,
-    outputToken: Token,
-    amountRaw: string,
-    feeAmount: number = 3000
-  ): Promise<QuoteResult> {
-    try {
-      console.debug('Getting quote from V4 Quoter contract');
-      
-      // Create ethers contract instance
-      const quoterContract = new ethers.Contract(
-        CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_V4QUOTER,
-        V4QuoterABI,
-        this.provider
-      );
-      
-      // Parse amount with proper decimals
-      const inputDecimals = inputToken.decimals; 
-      const amountIn = ethers.utils.parseUnits(amountRaw, inputDecimals);
-      
-      // Format parameters for the quoter call exactly as expected
-      const params = {
-        tokenIn: inputToken.address,
-        tokenOut: outputToken.address,
-        amountIn: amountIn.toString(),
-        fee: feeAmount,
-        sqrtPriceLimitX96: 0
-      };
-      
-      // Call quoter contract with properly typed parameters
-      const quoteResult = await quoterContract.callStatic.quoteExactInputSingle(
-        params.tokenIn,
-        params.tokenOut,
-        params.fee,
-        params.amountIn,
-        params.sqrtPriceLimitX96
-      );
-      
-      // Parse the result - handling BigNumber conversion properly
-      const amountOut = ethers.utils.formatUnits(
-        quoteResult.amountOut || quoteResult,
-        outputToken.decimals
-      );
-      
-      // Fetch pool data for routing information
-      const pool = await this.fetchPoolData(inputToken, outputToken, feeAmount);
-      
-      // Create a proper route with correct token ordering
-      // Ensure token0 and token1 are properly assigned
-      const route = new Route(
-        [pool],
-        inputToken,
-        outputToken
-      ) as Route<Token, Token>;
-      
-      // Calculate price impact using midPrice
-      const priceImpact = new Percent('50', '10000'); // Default 0.5%
-      
-      // Create a properly typed trade object
-      const quote = CurrencyAmount.fromRawAmount(
-        outputToken,
-        ethers.utils.parseUnits(amountOut, outputToken.decimals).toString()
-      );
-      
-      const trade = this.createProperTrade(
-        route,
-        CurrencyAmount.fromRawAmount(
-          inputToken,
-          amountIn.toString()
-        ),
-        quote,
-        TradeType.EXACT_INPUT
-      );
-
-      return {
-        quoteType: 'CONTRACT',
-        amountIn: amountRaw,
-        amountOut,
-        quote,
-        route,
-        priceImpact,
-        trade
-      };
-    } catch (error) {
-      console.error('Error in getQuoteFromContract:', error);
-      throw error; // Let the caller handle the error
-    }
-  }
-
-  /**
-   * Add a helper function to ensure we're always working with token instances
-   */
-  private ensureTokenAmount(amount: CurrencyAmount<Currency>): CurrencyAmount<Token> {
-    const currency = amount.currency;
-    
-    // If it's already a Token, we can just cast it
-    if (currency instanceof Token) {
-      return amount as CurrencyAmount<Token>;
-    }
-    
-    // If it's a native currency like ETH, we need to convert to WETH
-    const wethToken = SUPPORTED_TOKENS.WETH as Token;
-    return CurrencyAmount.fromRawAmount(
-      wethToken,
-      amount.quotient.toString()
-    );
-  }
-
-  /**
-   * Fix the direct quote implementation to use our helper
-   */
-  private async getDirectWethEthQuote(
-    fromToken: SupportedTokenSymbol,
-    toToken: SupportedTokenSymbol,
-    amountRaw: string
-  ): Promise<QuoteResult> {
-    // Use only Token instances, converting any ETH to WETH for type safety
-    const weth = SUPPORTED_TOKENS.WETH as Token;
-    
-    // Handle input token (always use WETH even for ETH input)
-    const inputToken = fromToken === 'ETH' ? weth : this.enforceTokenInstance(SUPPORTED_TOKENS[fromToken]);
-    
-    // Handle output token (always use WETH even for ETH output)
-    const outputToken = toToken === 'ETH' ? weth : this.enforceTokenInstance(SUPPORTED_TOKENS[toToken]);
-    
-    // For WETH/ETH the rate is always 1:1
-    const rawAmount = ethers.utils.parseUnits(amountRaw, inputToken.decimals).toString();
-    
-    // Create properly typed CurrencyAmount objects
-    const amountIn = CurrencyAmount.fromRawAmount(inputToken, rawAmount);
-    const amountOut = CurrencyAmount.fromRawAmount(outputToken, rawAmount);
-    
-    // Create dummy pool for the route
-    const pool = await this.fetchPoolData(inputToken, outputToken);
-    
-    // Create route and trade with proper typing
-    const route = new Route([pool], inputToken, outputToken) as Route<Token, Token>;
-    const trade = this.createProperTrade(
-      route,
-      amountIn,
-      amountOut,
-      TradeType.EXACT_INPUT
-    );
-    
-    return {
-      quoteType: 'DIRECT',
-      amountIn: amountRaw,
-      amountOut: amountRaw, // 1:1 for ETH/WETH
-      quote: amountOut,
-      route,
-      priceImpact: new Percent('0', '10000'), // 0% price impact for ETH/WETH
-      trade
-    };
-  }
-
-  /**
-   * Fetches pool data in a reliable way - handles token type consistency
-   */
-  async fetchPoolData(
-    inputToken: Token,
-    outputToken: Token,
-    fee: number = 3000
-  ): Promise<Pool> {
-    try {
-      // First check network status before attempting network calls
-      if (this.networkStatus === 'disconnected') {
-        console.warn('Network is disconnected, using fallback pool data');
-        return this.createFallbackPool(inputToken, outputToken, fee);
-      }
-
-      try {
-        // Re-detect network if status is unknown
-        if (this.networkStatus !== 'connected') {
-          await this.detectNetwork();
-        }
-        
-        // Sort the tokens
-        const [token0, token1] = this.sortTokens(inputToken, outputToken);
-        
-        // Create tick data provider
-        const tickDataProvider = new SimpleTickDataProvider(0, 60);
-        
-        // Use standard tick spacing for fee
-        let tickSpacing = 60; // Default for 0.3% pools
-        if (fee === 500) tickSpacing = 10;
-        if (fee === 100) tickSpacing = 1;
-        if (fee === 10000) tickSpacing = 200;
-        
-        // Debug
-        this.logTokenDetails(token0, 'Token0');
-        this.logTokenDetails(token1, 'Token1');
-        
-        // Get pool state for initializing the pool
-        const quoterContract = this.getQuoterContract();
-        
-        const poolParams = await quoterContract.getPoolState(
-          token0.address,
-          token1.address,
-          fee,
-          CONTRACT_ADDRESSES.SPEND_SAVE_HOOK
-        );
-        
-        // Default for 0.3% pools
-        
-        // Create pool with all required parameters
-        return new Pool(
-          token0,
-          token1,
-          fee,
-          tickSpacing,
-          CONTRACT_ADDRESSES.SPEND_SAVE_HOOK, // Using your hook as hook
-          poolParams.sqrtPriceX96.toString(),
-          poolParams.liquidity.toString(),
-          poolParams.tick,
-          tickDataProvider
-        );
-      } catch (error) {
-        console.warn('Error fetching on-chain pool data:', error);
-        
-        if (error instanceof Error && 
-            (error.message.includes('PRICE_BOUNDS') || 
-             error.message.includes('noNetwork') ||
-             error.message.includes('network disconnected'))) {
-          // More specific error handling for price bounds issues
-          console.warn('Price bounds or network error, using safe defaults');
-          return this.createFallbackPool(inputToken, outputToken, fee);
-        }
-        
-        // For other errors, still try to create a default pool
-        return this.createFallbackPool(inputToken, outputToken, fee);
-      }
-    } catch (error) {
-      console.error('Error in fetchPoolData:', error);
-      // Final fallback with very safe defaults
-      return this.createFallbackPool(inputToken, outputToken, fee);
-    }
-  }
-  
   /**
    * Create a fallback pool with safe default values
    */
@@ -642,245 +331,37 @@ export class UniswapV4Client {
   }
 
   /**
-   * Get a quote using the SDK simulation method
+   * Fetches pool data in a reliable way - handles token type consistency
    */
-  async getQuoteFromSdk(
-    amountIn: CurrencyAmount<Token>,
+  async fetchPoolData(
+    inputToken: Token,
     outputToken: Token,
-    hookData: string = '0x',
-    feeAmount: number = 3000
-  ): Promise<QuoteResult> {
+    fee: number = 3000
+  ): Promise<Pool> {
     try {
-      console.debug('Getting quote from SDK simulation')
-      const inputToken = amountIn.currency as Token;
-      
-      // Ensure both tokens are proper instances
-      const tokenA = this.enforceTokenInstance(inputToken);
-      const tokenB = this.enforceTokenInstance(outputToken);
-      
-      // Get pool data with proper typing
-      const pool = await this.fetchPoolData(tokenA, tokenB, feeAmount);
-      
-      // Create a route with tokens in the correct order
-      const route = new Route([pool], tokenA, tokenB) as Route<Token, Token>;
-      
-      // Calculate the output amount using the pool's getOutputAmount method
-      let outputAmount: CurrencyAmount<Token>;
-      try {
-        const [amount] = await pool.getOutputAmount(amountIn);
-        outputAmount = amount as CurrencyAmount<Token>;
-      } catch (error) {
-        console.warn('Error using pool.getOutputAmount, falling back to price calculation', error);
-        
-        // Fallback calculation if getOutputAmount fails
-        const midPrice = route.midPrice;
-        const rawInputAmount = JSBI.BigInt(amountIn.quotient.toString());
-        const outputDecimals = tokenB.decimals;
-        
-        // Convert input to output using the price
-        const priceScalingFactor = JSBI.exponentiate(
-          JSBI.BigInt(10),
-          JSBI.BigInt(outputDecimals)
-        );
-        
-        // Calculate the raw output amount
-        const rawOutputAmount = JSBI.divide(
-          JSBI.multiply(
-            rawInputAmount,
-            JSBI.BigInt(Math.floor(Number(midPrice.toSignificant(18)) * 10000))
-          ),
-          JSBI.BigInt(10000)
-        );
-        
-        // Create the output amount
-        outputAmount = CurrencyAmount.fromRawAmount(
-          tokenB,
-          rawOutputAmount.toString()
-        );
-      }
-      
-      // Create a proper trade object
-      const trade = this.createProperTrade(
-        route,
-        amountIn,
-        outputAmount,
-        TradeType.EXACT_INPUT
-      );
-      
-      // Calculate a rough price impact - use fixed 0.5% as default
-      const priceImpact = new Percent('50', '10000');
-      
-      return {
-        quoteType: 'SDK',
-        quote: outputAmount,
-        route,
-        priceImpact,
-        trade
-      };
-    } catch (error) {
-      console.error('Error in getQuoteFromSdk:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get a quote for a swap with prioritized methods
-   */
-  async getQuote(
-    fromToken: SupportedTokenSymbol,
-    toToken: SupportedTokenSymbol,
-    amountRaw: string,
-    hookFlags?: HookFlags,
-    savingsPath?: SupportedTokenSymbol[]
-  ): Promise<QuoteResult> {
-    try {
-      // First check network connection
+      // First check network status before attempting network calls
       if (this.networkStatus === 'disconnected') {
-        try {
-          await this.detectNetwork();
-        } catch (netErr) {
-          console.warn('Network disconnected during quote, using fallback');
-          return this.getFallbackQuoteForPair(fromToken, toToken, amountRaw);
-        }
-      }
-
-      // Special optimized path for ETH-WETH swaps which are 1:1
-      if ((fromToken === 'ETH' && toToken === 'WETH') || 
-          (fromToken === 'WETH' && toToken === 'ETH')) {
-        return this.getDirectWethEthQuote(fromToken, toToken, amountRaw);
-      }
-
-      // Get token instances
-      const inputToken = this.enforceTokenInstance(SUPPORTED_TOKENS[fromToken]);
-      const outputToken = this.enforceTokenInstance(SUPPORTED_TOKENS[toToken]);
-      
-      // Parse amount with proper decimals
-      const amountIn = CurrencyAmount.fromRawAmount(
-        inputToken,
-        JSBI.BigInt(ethers.utils.parseUnits(amountRaw, inputToken.decimals).toString())
-      ) as CurrencyAmount<Token>;
-
-      // Generate hook data if needed
-      let hookData = '0x';
-      if (hookFlags && !savingsPath) {
-        // Simple hook flags without savings path
-        hookData = encodeSpendSaveHookData({
-          before: hookFlags.before,
-          after: hookFlags.after,
-          delta: hookFlags.delta
-        });
-      } else if (savingsPath && savingsPath.length > 0) {
-        // We have a savings path, encode it properly
-        const savingsToken = savingsPath[savingsPath.length - 1]; // Last token in path
-        const savingsTokenAddress = SUPPORTED_TOKENS[savingsToken].address;
-        
-        hookData = encodeSpendSaveHookData({
-          before: hookFlags?.before || true,
-          after: hookFlags?.after || false,
-          delta: hookFlags?.delta || false,
-          path: [savingsTokenAddress]
-        });
+        console.warn('Network is disconnected, using fallback pool data');
+        return this.createFallbackPool(inputToken, outputToken, fee);
       }
 
       try {
-        // Use contract-based quoter first
-        return await this.getQuoteFromContract(inputToken, outputToken, amountRaw);
-      } catch (contractErr) {
-        console.warn('Contract quote failed, falling back to SDK quote:', contractErr);
-        
-        try {
-          // Fall back to SDK-based quote
-          return await this.getQuoteFromSdk(amountIn, outputToken, hookData);
-        } catch (sdkErr) {
-          console.warn('SDK quote failed, trying direct pair estimation:', sdkErr);
-          
-          // Third fallback - for common pairs, use direct estimation
-          return this.getFallbackQuoteForPair(fromToken, toToken, amountRaw);
+        // Re-detect network if status is unknown
+        if (this.networkStatus !== 'connected') {
+          await this.detectNetwork();
         }
+        
+        // For now, just return fallback pool since we removed quoter functionality
+        return this.createFallbackPool(inputToken, outputToken, fee);
+      } catch (error) {
+        console.warn('Error fetching on-chain pool data:', error);
+        return this.createFallbackPool(inputToken, outputToken, fee);
       }
     } catch (error) {
-      console.error('Quote error:', error);
-      // Last resort fallback
-      return this.getFallbackQuoteForPair(fromToken, toToken, amountRaw);
+      console.error('Error in fetchPoolData:', error);
+      // Final fallback with very safe defaults
+      return this.createFallbackPool(inputToken, outputToken, fee);
     }
-  }
-  
-  /**
-   * Get a fallback quote for common token pairs
-   */
-  private getFallbackQuoteForPair(
-    fromToken: SupportedTokenSymbol,
-    toToken: SupportedTokenSymbol,
-    amountRaw: string
-  ): Promise<QuoteResult> {
-    console.info(`Using fallback price estimate for ${fromToken}-${toToken}`);
-    
-    // Properly ensure we have token instances
-    const tokenA = this.enforceTokenInstance(SUPPORTED_TOKENS[fromToken]);
-    const tokenB = this.enforceTokenInstance(SUPPORTED_TOKENS[toToken]);
-    
-    // Create token amounts
-    const amountIn = CurrencyAmount.fromRawAmount(
-      tokenA,
-      JSBI.BigInt(ethers.utils.parseUnits(amountRaw, tokenA.decimals).toString())
-    ) as CurrencyAmount<Token>;
-    
-    // Get fallback output amount based on pair
-    let outputRaw = '0';
-    const inputFloat = parseFloat(amountRaw);
-    
-    // Handle common pairs with rough price estimates
-    if (fromToken === 'ETH') {
-      if (toToken === 'WETH') {
-        // 1:1 for ETH:WETH
-        outputRaw = amountRaw;
-      } else if (toToken === 'USDC') {
-        // ~$2500 per ETH (simplified)
-        outputRaw = (inputFloat * 2500).toFixed(6);
-      }
-    } else if (fromToken === 'WETH') {
-      if (toToken === 'ETH') {
-        // 1:1 for WETH:ETH
-        outputRaw = amountRaw;
-      } else if (toToken === 'USDC') {
-        // ~$2500 per WETH
-        outputRaw = (inputFloat * 2500).toFixed(6);
-      }
-    } else if (fromToken === 'USDC') {
-      if (toToken === 'ETH' || toToken === 'WETH') {
-        // ~$2500 per ETH (inverse)
-        outputRaw = (inputFloat / 2500).toFixed(18);
-      }
-    }
-    
-    // Create output amount
-    const outputAmount = CurrencyAmount.fromRawAmount(
-      tokenB,
-      JSBI.BigInt(ethers.utils.parseUnits(outputRaw, tokenB.decimals).toString())
-    ) as CurrencyAmount<Token>;
-    
-    // Create fallback route and pool
-    const pool = this.createFallbackPool(tokenA, tokenB, 3000);
-    const route = new Route([pool], tokenA, tokenB);
-    
-    // Create trade
-    const trade = this.createProperTrade(
-      route,
-      amountIn,
-      outputAmount,
-      TradeType.EXACT_INPUT
-    );
-    
-    // Return a quote result
-    return Promise.resolve({
-      quoteType: 'SIMULATION',
-      amountIn: amountIn.toExact(),
-      amountOut: outputAmount.toExact(),
-      quote: outputAmount,
-      route,
-      priceImpact: new Percent(JSBI.BigInt(0), JSBI.BigInt(10000)),
-      trade
-    });
   }
 
   async executeSwap(params: {
@@ -901,10 +382,7 @@ export class UniswapV4Client {
       toToken,
       amountRaw,
       slippageBps = 50, // Default to 0.5%
-      deadlineSeconds = 1200, // Default to 20 minutes
       gasOverrideGwei,
-      hookFlags,
-      savingsPath,
       disableSavings = false,
     } = params
 
@@ -927,45 +405,9 @@ export class UniswapV4Client {
       throw new Error('User address not available')
     }
 
-    // const planner = new V4Planner()
-    // let route: Route<Token, Token>
-    // let trade: V4Trade<Token, Token, TradeType>
-
-    // if (savingsPath && savingsPath.length > 1) {
-    //   const { buildSavingsConversionRoute } = await import('./routeBuilder')
-    //   route = await buildSavingsConversionRoute(this, savingsPath)
-
-    //   const firstToken = SUPPORTED_TOKENS[savingsPath[0]] as Token
-    //   const amountInForRoute = CurrencyAmount.fromRawAmount(
-    //     firstToken,
-    //     ethers.utils.parseUnits(amountRaw, firstToken.decimals).toString(),
-    //   )
-    //   trade = await V4Trade.fromRoute(route, amountInForRoute, TradeType.EXACT_INPUT as TradeType)
-    // } else if (savingsPath && savingsPath.length === 1) {
-    //   ;({ route, trade } = await this.getQuote(savingsPath[0], toToken, amountRaw))
-    // } else {
-    //   ;({ route, trade } = await this.getQuote(fromToken, toToken, amountRaw))
-    // }
-
-    // // Create amount in for the trade parameters
-    // const amountIn = CurrencyAmount.fromRawAmount(
-    //   tokenA,
-    //   amountInRaw
-    // )
-
-    // // Encode hook data with spender address
-    // const hookData = encodeSpendSaveHookData(this.userAddress as `0x${string}`)
-
-    // // Determine hook flags – if disableSavings => turn everything off
-    // const finalHookFlags: HookFlags = disableSavings
-    //   ? { before: false, after: false, delta: false }
-    //   : { before: hookFlags?.before ?? true, after: hookFlags?.after ?? true, delta: hookFlags?.delta ?? true }
-
-    // const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
-    // const sqrtLimit = getSqrtPriceLimit(zeroForOne, slippageBps / 100)
     const valueToSend = fromToken === 'ETH' ? ethers.utils.parseUnits(amountRaw, 18) : ethers.BigNumber.from(0);
 
-    // Create PoolManager contract instance instead of V4Planner
+    // Create PoolManager contract instance
     const poolManagerContract = new ethers.Contract(
       CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER,
       PoolManagerAbi,
@@ -995,14 +437,13 @@ export class UniswapV4Client {
       sqrtPriceLimitX96: sqrtLimit.toString()
     };
 
-
     // Properly encode user address in hookData using ABI encoding
     const hookData = ethers.utils.defaultAbiCoder.encode(
       ['address'],
       [this.userAddress]
     );
 
-    console.log('PHASE 1: Direct PoolManager.swap call', {
+    console.log('Direct PoolManager.swap call', {
       poolKey,
       swapParams,
       hookData,
@@ -1033,7 +474,6 @@ export class UniswapV4Client {
       disableSavings,
     })
 
-
     try {
       const tx = await poolManagerContract.swap(
         poolKey,
@@ -1046,8 +486,9 @@ export class UniswapV4Client {
         }
       );
       
-      console.log('✅ PHASE 1 SUCCESS: Direct PoolManager.swap transaction sent:', tx.hash);
-      console.log('Hook will automatically execute beforeSwap and afterSwap');      return tx;
+      console.log('✅ Direct PoolManager.swap transaction sent:', tx.hash);
+      console.log('Hook will automatically execute beforeSwap and afterSwap');
+      return tx;
     } catch (error) {
       console.error('Swap execution error:', error)
       throw error
@@ -1135,4 +576,4 @@ export class UniswapV4Client {
       };
     }
   }
-} 
+}
