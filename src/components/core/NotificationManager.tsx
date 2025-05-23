@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import TransactionNotification, { NotificationType } from './TransactionNotification';
+import TransactionNotification, { NotificationType } from '@/components/ui/TransactionNotification';
 
 // Define the type for a notification
 export interface Notification {

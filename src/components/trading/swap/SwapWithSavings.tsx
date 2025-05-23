@@ -10,25 +10,26 @@ import useSpendSaveStrategy from '@/lib/hooks/useSpendSaveStrategy';
 import { useTokenList, Token } from '@/lib/hooks/useTokenList';
 import { useTokenBalances } from '@/lib/hooks/useTokenBalances';
 import { FiSettings, FiArrowDown, FiInfo, FiExternalLink, FiTarget, FiAlertTriangle, FiCheckCircle, FiClock } from 'react-icons/fi';
-import SwapConfirmationModal from './SwapConfirmationModal';
-import SpendSaveEventListeners from './SpendSaveEventListeners';
-import { useNotification } from './NotificationManager';
-import TokenSelector from './TokenSelector';
-import { TokenPriceDisplay } from './TokenPriceDisplay';
-import SwapWithSavingsGasInfo from './SwapWithSavingsGasInfo';
-import SpendSaveStrategyModal from './SpendSaveStrategyModal';
-import SavingsRatioIndicator from './SavingsRatioIndicator';
+import SwapConfirmationModal from '@/components/trading/swap/SwapConfirmationModal';
+import SpendSaveEventListeners from '@/components/wallet/SpendSaveEventListeners';
+import { useNotification } from '@/components/core/NotificationManager';
+import TokenSelector from '@/components/tokens/TokenSelector';
+import { TokenPriceDisplay } from '@/components/tokens/TokenPriceDisplay';
+import SwapWithSavingsGasInfo from '@/components/trading/swap/SwapWithSavingsGasInfo';
+import SpendSaveStrategyModal from '@/components/savings/setup/SpendSaveStrategyModal';
+import SavingsRatioIndicator from '@/components/savings/visualisation/SavingsRatioIndicator';
 import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
 import { cn } from '@/lib/utils';
-import SavingsSummary from './SavingsSummary';
+import SavingsSummary from '@/components/savings/overview/SavingsSummary';
 import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
+
 // ========== PHASE 3: Import Approval Components ==========
 import { 
   ApprovalStatusBanner, 
   ApprovalManager, 
   ApprovalProgress, 
   CompactApprovalStatus 
-} from './TokenApprovalComponents';
+} from '@/components/tokens/TokenApprovalComponents';
 
 // ========== PHASE 2: Strategy Setup Modal Component ==========
 const StrategySetupModal = ({ 

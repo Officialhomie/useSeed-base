@@ -4,11 +4,11 @@ import { Address, formatUnits, Abi } from 'viem';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowUp, FiBarChart2, FiDollarSign, FiTarget, FiClock, FiAward, FiAlertCircle } from 'react-icons/fi';
-import AnimatedProgressBar from './AnimatedProgressBar';
-import SavingsCalculator from './SavingsCalculator';
+import AnimatedProgressBar from '@/components/onboarding/AnimatedProgressBar';
+import SavingsCalculator from '@/components/savings/visualisation/SavingsCalculator';
 
 // Import ABIs
-import SPEND_SAVE_STORAGE_ABI from '@/ABI/SpenSaveStorage.json';
+import SPEND_SAVE_STORAGE_ABI from '@/abi/core/SpendSaveStorage.json';
 
 // Custom animated counter component
 const AnimatedCounter = ({ value, decimals = 2 }: { value: number, decimals?: number }) => {

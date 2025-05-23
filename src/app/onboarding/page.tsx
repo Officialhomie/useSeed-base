@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import OnboardingHero from '@/components/OnboardingHero';
-import NavigationBar from '@/components/NavigationBar';
+import OnboardingHero from '@/components/onboarding/OnboardingHero';
+import NavigationBar from '@/components/core/NavigationBar';
 import { ConnectAndSIWE } from '@/components/ConnectAndSIWE';
 import { motion } from 'framer-motion';
 

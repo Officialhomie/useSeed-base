@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
-import BasenameExplorer from '@/components/BasenameExplorer';
+import DashboardLayout from '@/components/core/DashboardLayout';
+import BasenameExplorer from '@/components/ui/BasenameExplorer';
 import '@/components/basename-explorer.css';
 
 export default function BasenameExplorerPage() {

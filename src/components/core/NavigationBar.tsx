@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import './navigation-bar.css';
-import SpendSaveWallet from './SpendSaveWallet';
+import SpendSaveWallet from '../wallet/SpendSaveWallet';
 import { FiHome, FiBarChart2, FiPieChart } from 'react-icons/fi';
 
 export default function NavigationBar() {

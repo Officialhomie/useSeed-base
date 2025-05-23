@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import DashboardLayout from '@/components/DashboardLayout';
-import DashboardOverview from '@/components/DashboardOverview';
+import DashboardLayout from '@/components/core/DashboardLayout';
+import DashboardOverview from '@/components/savings/overview/DashboardOverview';
 import './dashboard.css';
 
 export default function AppDashboard() {

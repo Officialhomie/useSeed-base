@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/core/DashboardLayout';
 import DCAComponent from '@/components/DCAComponent';
 
 export default function DCADashboard() {

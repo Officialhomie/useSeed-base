@@ -6,7 +6,7 @@ import { cn, color, pressable, text } from "@coinbase/onchainkit/theme";
 import { useAccount, useConnect, useConnectors, useSignTypedData, useBalance } from "wagmi";
 import { Address, Hex, parseUnits } from "viem";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
-import AdvancedOnboarding from "./AdvancedOnboarding";
+import AdvancedOnboarding from "./onboarding/AdvancedOnboarding";
 import SavingsStrategySetup from "./SavingsStrategySetup";
 
 // Define valid savings frequency types to match the expected type in AdvancedOnboarding

@@ -8,9 +8,9 @@ import { motion } from "framer-motion";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
 
 // Import ABIs
-import DailySavingsABI from "@/ABI/DailySavings.json";
-import SavingABI from "@/ABI/Saving.json";
-import SavingStrategyABI from "@/ABI/SavingStrategy.json";
+import DailySavingsABI from "@/abi/savings/DailySavings.json";
+import SavingABI from "@/abi/savings/Savings.json";
+import SavingStrategyABI from "@/abi/savings/SavingStrategy.json";
 
 // Savings plan card component
 const SavingsPlanCard = ({

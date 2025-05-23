@@ -1,7 +1,7 @@
 "use client";
 
-import NavigationBar from '@/components/NavigationBar';
-import Subscribe from '@/components/Subscribe';
+import NavigationBar from '@/components/core/NavigationBar';
+import Subscribe from '@/components/ui/Subscribe';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import '../page-styles.css';

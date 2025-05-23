@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/core/DashboardLayout';
 import { useAccount } from 'wagmi';
 import { motion } from 'framer-motion';
 import { FiArrowUp, FiArrowDown, FiDollarSign, FiActivity, FiPieChart } from 'react-icons/fi';

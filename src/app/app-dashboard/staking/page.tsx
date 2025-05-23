@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/core/DashboardLayout';
 import { motion } from 'framer-motion';
 import { FiArrowUpRight, FiClock, FiLock, FiUnlock, FiCodesandbox, FiAward, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import Image from 'next/image';

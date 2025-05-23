@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import EnhancedUserExperience from '@/components/EnhancedUserExperience';
-import NavigationBar from '@/components/NavigationBar';
+import EnhancedUserExperience from '@/components/ui/EnhancedUserExperience';
+import NavigationBar from '@/components/core/NavigationBar';
 
 export default function EnhancedExperiencePage() {
   // Handle client-side hydration

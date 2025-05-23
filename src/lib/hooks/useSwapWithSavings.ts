@@ -11,7 +11,7 @@ import { calculateV4SwapGasLimit, encodeSpendSaveHookData } from '../uniswap/Uni
 import useSavingsPreview from './useSavingsPreview';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { ethers } from 'ethers';
-import type { ApprovalStatus, ApprovalState } from '@/components/TokenApprovalComponents';
+import type { ApprovalStatus, ApprovalState } from '@/components/tokens/TokenApprovalComponents';
 
 
 interface StrategyValidationResult {

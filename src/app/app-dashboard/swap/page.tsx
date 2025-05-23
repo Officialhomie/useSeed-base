@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import SwapWithSavings from '@/components/SwapWithSavings';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/core/DashboardLayout';
 
 export default function SwapPage() {
   const { address } = useAccount();
