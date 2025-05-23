@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
-import SwapWithSavings from '@/components/SwapWithSavings';
+import SwapWithSavings from '@/components/trading/swap/SwapWithSavings';
 import DashboardLayout from '@/components/core/DashboardLayout';
 
 export default function SwapPage() {

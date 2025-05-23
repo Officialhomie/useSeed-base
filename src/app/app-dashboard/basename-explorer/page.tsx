@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/core/DashboardLayout';
 import BasenameExplorer from '@/components/ui/BasenameExplorer';
-import '@/components/basename-explorer.css';
+import '@/components/ui/basename-explorer.css';
 
 export default function BasenameExplorerPage() {
   const [mounted, setMounted] = useState(false);

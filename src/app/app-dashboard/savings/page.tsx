@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/core/DashboardLayout';
 import SavingsComponent from '@/components/savings/actions/SavingsComponent';
-import SavingsOverview from '@/components/SavingsOverview';
+import SavingsOverview from '@/components/savings/overview/SavingsOverview';
 import { motion } from 'framer-motion';
 import { FiTrendingUp, FiClock, FiCheckCircle } from 'react-icons/fi';
 

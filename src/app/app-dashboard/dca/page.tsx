@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/core/DashboardLayout';
-import DCAComponent from '@/components/DCAComponent';
+import DCAComponent from '@/components/trading/dca/DCAComponent';
 
 export default function DCADashboard() {
   const [mounted, setMounted] = useState(false);

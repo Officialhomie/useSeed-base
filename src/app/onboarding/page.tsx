@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import OnboardingHero from '@/components/onboarding/OnboardingHero';
 import NavigationBar from '@/components/core/NavigationBar';
-import { ConnectAndSIWE } from '@/components/ConnectAndSIWE';
+import { ConnectAndSIWE } from '@/components/wallet/ConnectAndSIWE';
 import { motion } from 'framer-motion';
 
 export default function OnboardingPage() {
