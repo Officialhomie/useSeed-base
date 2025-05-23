@@ -69,9 +69,9 @@ export function useTokenApprovals({
     // Skip if we're still loading allowances
     if (poolManagerAllowance === undefined || hookAllowance === undefined) {
       setApprovalState({
-        poolManager: 'checking',
-        hook: 'checking',
-        all: 'checking'
+        poolManager: 'checking' as ApprovalStatus,
+        hook: 'checking' as ApprovalStatus,
+        all: 'checking' as ApprovalStatus
       });
       return;
     }
