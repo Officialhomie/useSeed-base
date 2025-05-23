@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { Address } from "viem";
-import DCATickStrategy from "./DCATickStrategy";
+import DCATickStrategy from "@/components/trading/dca/DCATickStrategy";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
-import DCAContractAbi from '../ABI/DCA.json'
+import DCAContractAbi from '@/abi/trading/DCA.json';
+
 
 // Chart component for visualizing investment history
 const InvestmentChart = ({ data }: { data: { date: string; amount: number }[] }) => {

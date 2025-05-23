@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef } from 'react';
-import '../components/basename-explorer.css';
-import '../components/navigation-bar.css';
+import '@/components/ui/basename-explorer.css';
+import '@/components/core/navigation-bar';
 import './page-styles.css';
 import './smart-wallet.css';
 import Link from 'next/link';

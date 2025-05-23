@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import DCAABI from "@/ABI/DCA.json";
+import DCAABI from "@/abi/trading/DCA.json";
 
 export default function DCATickStrategy({ onSave, onCancel }: { onSave: (data: any) => void, onCancel: () => void }) {
   const { address } = useAccount();

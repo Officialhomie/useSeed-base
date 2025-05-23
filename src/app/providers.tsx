@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode, useEffect } from "react";
 import { WagmiProvider } from "wagmi";
 import { config } from "../../wagmi";
-import NotificationProvider from '@/components/NotificationManager';
+import NotificationProvider from '@/components/core/NotificationManager';
 import { OnchainKitProvider } from '@coinbase/onchainkit';
 import { base } from 'wagmi/chains';
 
