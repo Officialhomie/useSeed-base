@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import GasPriceSelector from './GasPriceSelector';
+import GasPriceSelector from '@/components/trading/swap/SwapWithSavingsGasInfo';
 import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
 
 interface SwapWithSavingsGasInfoProps {

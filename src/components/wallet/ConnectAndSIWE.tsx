@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Hex } from "viem";
 import { useAccount, useConnect, usePublicClient, useSignMessage, useDisconnect } from "wagmi";
 import { SiweMessage } from "siwe";
-import { cbWalletConnector, isSmartWalletUser } from "../../wagmi";
+import { cbWalletConnector, isSmartWalletUser } from "../../../wagmi";
 
 const ConnectButton = ({ onClick, loading }: { onClick: () => void; loading: boolean }): JSX.Element => (
   <button

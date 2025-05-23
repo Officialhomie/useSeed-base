@@ -24,7 +24,7 @@ import { encodeSpendSaveHookData } from './UniswapV4Integration'
 import { getSqrtPriceLimit } from './UniswapV4Integration'
 import type { HookFlags } from './types'
 import V4QuoterABI from '@/ABI/V4Quoter.json'
-import PoolManagerAbi from '@/ABI/PoolManager.json'
+import PoolManagerAbi from '@/abi/core/PoolManager.json'
 import { BaseScanClient } from '../basescan/BaseScanClient'
 
 export interface QuoteResult {
