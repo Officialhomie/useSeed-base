@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import '@/components/ui/basename-explorer.css';
-import '@/components/core/navigation-bar';
+import '@/components/core/navigation-bar.css';
 import './page-styles.css';
 import './smart-wallet.css';
 import Link from 'next/link';

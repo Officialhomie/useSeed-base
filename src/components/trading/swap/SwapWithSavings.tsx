@@ -290,12 +290,11 @@ export default function SwapWithSavings() {
     selectedGasPrice
   ]);
   
-  // Use the swap with savings hook with memoized parameters
+  // Use the swap with savings hook with memoized parameters (REMOVED estimatedOutput)
   const { 
     executionStatus,
     savedAmount,
     actualSwapAmount,
-    estimatedOutput,
     executeSwap,
     isLoading: isSwapping,
     isSuccess,
@@ -324,12 +323,8 @@ export default function SwapWithSavings() {
     canProceedWithApprovals
   } = useSwapWithSavings(swapParams);
   
-  // Update estimated output amount when it changes
-  useEffect(() => {
-    if (estimatedOutput && parseFloat(estimatedOutput) > 0) {
-      setToAmount(estimatedOutput);
-    }
-  }, [estimatedOutput]);
+  // REMOVED: The useEffect that was trying to use estimatedOutput since we don't have quotes anymore
+  // The toAmount field will now remain as a read-only placeholder
   
   // Get actual swap amount function for SavingsSummary
   const getActualSwapAmount = useCallback(() => {
@@ -441,6 +436,9 @@ export default function SwapWithSavings() {
       setValidationError(null);
     }
     
+    // Clear the toAmount since we don't have quote functionality
+    setToAmount("");
+    
     // Perform real-time validation when user inputs amount
     if (value && fromToken && tokenBalances && tokenBalances[fromToken.symbol]) {
       const amount = parseFloat(value);
@@ -463,10 +461,16 @@ export default function SwapWithSavings() {
   // Handle token selection change
   const handleFromTokenChange = (token: Token) => {
     setFromToken(token);
+    // Clear amounts when changing tokens since we don't have quotes
+    setFromAmount("");
+    setToAmount("");
   };
   
   const handleToTokenChange = (token: Token) => {
     setToToken(token);
+    // Clear amounts when changing tokens since we don't have quotes
+    setFromAmount("");
+    setToAmount("");
   };
   
   // Handle slippage change
@@ -911,7 +915,7 @@ export default function SwapWithSavings() {
           </button>
         </div>
         
-        {/* To Token Input Field */}
+        {/* To Token Input Field - Now shows as placeholder since we don't have quotes */}
         <div className="bg-gray-800 rounded-xl p-3 sm:p-4 mb-4">
           <div className="flex flex-wrap justify-between items-center mb-2">
             <label className="text-xs sm:text-sm text-gray-400">To</label>
@@ -926,8 +930,8 @@ export default function SwapWithSavings() {
               type="text"
               value={toAmount}
               readOnly
-              placeholder="0.0"
-              className="bg-transparent text-white text-lg sm:text-xl w-full focus:outline-none font-medium"
+              placeholder="Output amount (execute swap to see)"
+              className="bg-transparent text-gray-500 text-lg sm:text-xl w-full focus:outline-none font-medium"
             />
             <TokenSelector
               value={toToken}
@@ -1149,4 +1153,4 @@ export default function SwapWithSavings() {
       />
     </>
   );
-} 
+}
