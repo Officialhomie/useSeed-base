@@ -22,6 +22,13 @@ import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
 import { cn } from '@/lib/utils';
 import SavingsSummary from './SavingsSummary';
 import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
+// ========== PHASE 3: Import Approval Components ==========
+import { 
+  ApprovalStatusBanner, 
+  ApprovalManager, 
+  ApprovalProgress, 
+  CompactApprovalStatus 
+} from './TokenApprovalComponents';
 
 // ========== PHASE 2: Strategy Setup Modal Component ==========
 const StrategySetupModal = ({ 
@@ -304,7 +311,16 @@ export default function SwapWithSavings() {
     isSettingUpStrategy,
     setupStrategy,
     canExecuteSwap,
-    strategySetupRequired
+    strategySetupRequired,
+    // ========== PHASE 3: Approval-related properties ==========
+    approvalStatus,
+    approvalState,
+    isCheckingApprovals,
+    isApprovingTokens,
+    needsApprovals,
+    approveAllTokens,
+    refreshApprovals,
+    canProceedWithApprovals
   } = useSwapWithSavings(swapParams);
   
   // Update estimated output amount when it changes
@@ -504,6 +520,43 @@ export default function SwapWithSavings() {
     }
   };
 
+  // ========== PHASE 3: Approval Management Handlers ==========
+  const handleApproveAll = async () => {
+    try {
+      console.log('PHASE 3: Approving all tokens from UI...');
+      const success = await approveAllTokens();
+      
+      if (success) {
+        addNotification({
+          type: 'success',
+          title: 'Approvals Complete',
+          message: 'All token approvals completed successfully'
+        });
+      }
+    } catch (error) {
+      console.error('PHASE 3: Approval failed:', error);
+      addNotification({
+        type: 'error',
+        title: 'Approval Failed',
+        message: error instanceof Error ? error.message : 'Failed to approve tokens'
+      });
+    }
+  };
+
+  const handleRefreshApprovals = async () => {
+    try {
+      console.log('PHASE 3: Refreshing approvals from UI...');
+      await refreshApprovals();
+    } catch (error) {
+      console.error('PHASE 3: Refresh failed:', error);
+      addNotification({
+        type: 'error',
+        title: 'Refresh Failed',
+        message: 'Failed to refresh approval status'
+      });
+    }
+  };
+
   // ========== PHASE 2: Show strategy setup modal when needed ==========
   const [showStrategySetupModal, setShowStrategySetupModal] = useState(false);
   useEffect(() => {
@@ -533,6 +586,16 @@ export default function SwapWithSavings() {
           type: 'error',
           title: 'Strategy Validation Failed',
           message: strategyValidation.errors[0]
+        });
+        return;
+      }
+      
+      // PHASE 3: Check approval status
+      if (needsApprovals && !canProceedWithApprovals) {
+        addNotification({
+          type: 'warning',
+          title: 'Token Approvals Required',
+          message: 'Please approve tokens for swapping and savings functionality.'
         });
         return;
       }
@@ -675,11 +738,31 @@ export default function SwapWithSavings() {
           </div>
         </div>
         
+        {/* ========== PHASE 2: Strategy Status Banner ========== */}
+        <StrategyStatusBanner
+          validation={strategyValidation}
+          isValidating={isValidatingStrategy}
+          onSetupStrategy={() => setShowStrategySetupModal(true)}
+          disableSavings={disableSavingsForThisSwap}
+        />
+        {/* ========== PHASE 3: Approval Status and Management ========== */}
+        <ApprovalStatusBanner
+          approvalStatus={approvalStatus}
+          approvalState={approvalState}
+          token={fromToken?.symbol || ''}
+          amount={fromAmount}
+          onApproveAll={handleApproveAll}
+          onRefresh={handleRefreshApprovals}
+          enabled={!disableSavingsForThisSwap && fromToken?.symbol !== 'ETH'}
+        />
+        <ApprovalProgress
+          approvalStatus={approvalStatus}
+          approvalState={approvalState}
+        />
         {/* Settings panel */}
         {showSettings && (
           <div className="mb-4 bg-gray-800/40 rounded-xl p-3 sm:p-4">
             <h3 className="text-white font-medium mb-2 sm:mb-3">Transaction Settings</h3>
-            
             <div className="mb-4">
               <label className="block text-sm text-gray-400 mb-2">Slippage Tolerance</label>
               <div className="flex flex-wrap gap-2">
@@ -713,7 +796,6 @@ export default function SwapWithSavings() {
                 </div>
               </div>
             </div>
-            
             {strategy.isConfigured && (
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
@@ -731,7 +813,6 @@ export default function SwapWithSavings() {
                     </div>
                   </div>
                 </div>
-                
                 {!disableSavingsForThisSwap && (
                   <div className="mb-3">
                     <label className="block text-sm text-gray-400 mb-2">Override Savings Percentage</label>
@@ -750,6 +831,26 @@ export default function SwapWithSavings() {
                 )}
               </div>
             )}
+            {/* ========== PHASE 3: Advanced Approval Manager in Settings ========== */}
+            <ApprovalManager
+              approvalStatus={approvalStatus}
+              approvalState={approvalState}
+              token={fromToken?.symbol || ''}
+              amount={fromAmount}
+              onApprovePoolManager={async () => {
+                // This would call the individual approval function
+                return await handleApproveAll();
+              }}
+              onApproveHook={async () => {
+                // This would call the individual approval function  
+                return await handleApproveAll();
+              }}
+              onApproveAll={async () => {
+                return await handleApproveAll();
+              }}
+              onRefresh={handleRefreshApprovals}
+              enabled={!disableSavingsForThisSwap && fromToken?.symbol !== 'ETH'}
+            />
           </div>
         )}
         
@@ -931,15 +1032,7 @@ export default function SwapWithSavings() {
           </div>
         )}
         
-        {/* ========== PHASE 2: Strategy Status Banner ========== */}
-        <StrategyStatusBanner
-          validation={strategyValidation}
-          isValidating={isValidatingStrategy}
-          onSetupStrategy={() => setShowStrategySetupModal(true)}
-          disableSavings={disableSavingsForThisSwap}
-        />
-        
-        {/* ========== PHASE 2: Enhanced Swap Button with Strategy Validation ========== */}
+        {/* ========== PHASE 2 & 3: Enhanced Swap Button with Strategy + Approval Validation ========== */}
         <button
           disabled={
             !fromToken || 
@@ -949,16 +1042,20 @@ export default function SwapWithSavings() {
             isSwapping || 
             parseFloat(fromAmount) <= 0 || 
             validationError !== null ||
-            !canExecuteSwap || // PHASE 2: Strategy validation
-            isValidatingStrategy || // PHASE 2: Don't allow while validating
-            isSettingUpStrategy || // PHASE 2: Don't allow while setting up
-            executionStatus === 'validating-strategy' || // PHASE 2: Don't allow during validation
-            executionStatus === 'setting-strategy' // PHASE 2: Don't allow during setup
+            !canExecuteSwap || // Combined strategy + approval validation
+            isValidatingStrategy || 
+            isSettingUpStrategy || 
+            isCheckingApprovals || // PHASE 3: Don't allow while checking approvals
+            isApprovingTokens || // PHASE 3: Don't allow while approving
+            executionStatus === 'validating-strategy' || 
+            executionStatus === 'setting-strategy'
           }
           onClick={handleSwapClick}
           className={`w-full py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-bold ${
             fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0 && 
-            validationError === null && canExecuteSwap && !isValidatingStrategy && !isSettingUpStrategy
+            validationError === null && canExecuteSwap && !isValidatingStrategy && !isSettingUpStrategy &&
+            !isCheckingApprovals && !isApprovingTokens &&
+            executionStatus !== 'validating-strategy' && executionStatus !== 'setting-strategy'
               ? "bg-blue-600 hover:bg-blue-500 text-white"
               : "bg-gray-700 text-gray-400 cursor-not-allowed"
           } transition-colors flex items-center justify-center`}
@@ -979,12 +1076,18 @@ export default function SwapWithSavings() {
               ? "Validating Strategy..."
             : isSettingUpStrategy || executionStatus === 'setting-strategy'
               ? "Setting Up Strategy..."
+            : isCheckingApprovals // PHASE 3: Checking approvals state
+              ? "Checking Approvals..."
+            : isApprovingTokens // PHASE 3: Approving tokens state
+              ? "Approving Tokens..."
             : !fromAmount || parseFloat(fromAmount) <= 0
               ? "Enter an amount"
             : validationError !== null
               ? "Insufficient balance"
             : strategySetupRequired
               ? "Set Up Savings Strategy"
+            : needsApprovals && !canProceedWithApprovals // PHASE 3: Needs approvals
+              ? "Approve Tokens"
             : !canExecuteSwap && strategyValidation.errors.length > 0
               ? "Fix Strategy Issues"
             : "Swap"

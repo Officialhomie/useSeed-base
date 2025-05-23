@@ -11,6 +11,7 @@ import { calculateV4SwapGasLimit, encodeSpendSaveHookData } from '../uniswap/Uni
 import useSavingsPreview from './useSavingsPreview';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { ethers } from 'ethers';
+import type { ApprovalStatus, ApprovalState } from '@/components/TokenApprovalComponents';
 
 
 interface StrategyValidationResult {
@@ -77,6 +78,14 @@ interface SwapWithSavingsResult {
   setupStrategy: (params: StrategySetupParams) => Promise<boolean>;
   canExecuteSwap: boolean;
   strategySetupRequired: boolean;
+  approvalStatus: ApprovalStatus;
+  approvalState: ApprovalState;
+  isCheckingApprovals: boolean;
+  isApprovingTokens: boolean;
+  needsApprovals: boolean;
+  approveAllTokens: () => Promise<boolean>;
+  refreshApprovals: () => Promise<void>;
+  canProceedWithApprovals: boolean;
 }
 
 /**
@@ -606,6 +615,15 @@ export default function useSwapWithSavings(
     isSettingUpStrategy,
     setupStrategy,
     canExecuteSwap,
-    strategySetupRequired
+    strategySetupRequired,
+    // ========== PHASE 3: Approval-related returns (placeholders) ==========
+    approvalStatus: 'not-required',
+    approvalState: { poolManager: 'not-required', hook: 'not-required', all: 'not-required' },
+    isCheckingApprovals: false,
+    isApprovingTokens: false,
+    needsApprovals: false,
+    approveAllTokens: async () => true,
+    refreshApprovals: async () => {},
+    canProceedWithApprovals: true
   };
 } 
