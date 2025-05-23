@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import { Address, formatUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
-import TokenABI from '@/ABI/Token.json';
+import TokenABI from '@/abi/tokens/Token.json';
 import { SUPPORTED_TOKENS, SupportedTokenSymbol } from '../uniswap/tokens';
 import { BaseScanClient } from '../basescan/BaseScanClient';
 

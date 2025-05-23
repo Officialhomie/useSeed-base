@@ -32,20 +32,15 @@ export const CONTRACT_ADDRESSES = {
 } as const;
 
 // Import ABIs
-import yieldModuleAbi from "../ABI/YieldModule.json";
-import dcaAbi from "../ABI/DCA.json";
-import savingAbi from "../ABI/Saving.json";
-import savingStrategyAbi from "../ABI/SavingStrategy.json";
-import dailySavingsAbi from "../ABI/DailySavings.json";
-import spendSaveStorageAbi from "../ABI/SpenSaveStorage.json";
-import spendSaveHookAbi from "../ABI/SpendSaveHook.json";
-import tokenAbi from "../ABI/Token.json";
-import PositonDescAbi from "../ABI/PositionDescriptor.json"
-import PositionManAbi from "../ABI/PositionManager.json";
-import poolManagerAbi from "../ABI/PoolManager.json";
-import universalRouterAbi from "../ABI/UniversalRouter.json";
-import v4QuoterAbi from "../ABI/V4Quoter.json";
-import stateViewAbi from "../ABI/StateView.json";
+import yieldModuleAbi from "../abi/savings/YieldModule.json";
+import dcaAbi from "../abi/trading/DCA.json";
+import savingAbi from "../abi/savings/Savings.json";
+import savingStrategyAbi from "../abi/savings/SavingStrategy.json";
+import dailySavingsAbi from "../abi/savings/DailySavings.json";
+import spendSaveStorageAbi from "../abi/core/SpendSaveStorage.json";
+import spendSaveHookAbi from "../abi/core/SpendSaveHook.json";
+import tokenAbi from "../abi/tokens/Token.json";
+import poolManagerAbi from "../abi/core/PoolManager.json";
 
 // Initialize public client
 export const getPublicClient = (chain: Chain = base) => {
@@ -54,6 +49,29 @@ export const getPublicClient = (chain: Chain = base) => {
     transport: http(),
   });
 };
+
+// ========== PHASE 3: EXPORT SPECIFIC ADDRESS GROUPS ==========
+export const APPROVAL_REQUIRED_CONTRACTS = {
+  POOL_MANAGER: CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER,
+  SPEND_SAVE_HOOK: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+} as const;
+
+export const TOKEN_ADDRESSES = {
+  ETH: CONTRACT_ADDRESSES.ETH,
+  USDC: CONTRACT_ADDRESSES.USDC, 
+  WETH: CONTRACT_ADDRESSES.WETH,
+} as const;
+
+export const SAVINGS_CONTRACTS = {
+  STORAGE: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
+  STRATEGY: CONTRACT_ADDRESSES.SAVING_STRATEGY,
+  DCA: CONTRACT_ADDRESSES.DCA,
+  HOOK: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+} as const;
+
+// ========== TYPE EXPORTS FOR TYPE SAFETY ==========
+export type ContractAddressKey = keyof typeof CONTRACT_ADDRESSES;
+export type TokenSymbol = keyof typeof TOKEN_ADDRESSES;
 
 // Contract instances creation helper
 export const getContractInstance = (
@@ -120,31 +138,6 @@ export const getContracts = (chain: Chain = base) => {
     uniswapPoolManager: getContractInstance(
       CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER,
       poolManagerAbi,
-      chain
-    ),
-    uniswapUniversalRouter: getContractInstance(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_UNIVERSAL_ROUTER,
-      universalRouterAbi,
-      chain
-    ),
-    uniswapV4Quoter: getContractInstance(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_V4QUOTER,
-      v4QuoterAbi,
-      chain
-    ),
-    uniswapStateView: getContractInstance(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_STATE_VIEW,
-      stateViewAbi,
-      chain
-    ),
-    uniswapPositionsManager: getContractInstance(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POSITIONS_MANAGER,
-      PositionManAbi,
-      chain
-    ),
-    uniswapPositionsDescriptor: getContractInstance(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POSITIONS_DESCRIPTOR,
-      PositonDescAbi,
       chain
     ),
   };
