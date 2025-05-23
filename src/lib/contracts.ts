@@ -22,6 +22,8 @@ export const CONTRACT_ADDRESSES = {
   UNISWAP_BASE_MAINNET_POOL_SWAP_TEST: "0x8b5bcc363dde2614281ad875bad385e0a785d3b9" as Address,
   UNISWAP_BASE_MAINNET_V4QUOTER: "0x0d5e0f971ed27fbff6c2837bf31316121532048d" as Address,
   UNISWAP_BASE_MAINNET_STATE_VIEW: "0xa3c0c9b65bad0b08107aa264b0f3db444b867a71" as Address,
+  UNISWAP_BASE_MAINNET_POSITIONS_MANAGER: "0x7c5f5a4bbd8fd63184577525326123b519429bdc" as Address,
+  UNISWAP_BASE_MAINNET_POSITIONS_DESCRIPTOR: "0x25D093633990DC94BeDEeD76C8F3CDaa75f3E7D5" as Address,
   // Common token addresses
   ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address, // ETH address stays the same
   USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address, // Base Mainnet USDC
@@ -38,6 +40,12 @@ import dailySavingsAbi from "../ABI/DailySavings.json";
 import spendSaveStorageAbi from "../ABI/SpenSaveStorage.json";
 import spendSaveHookAbi from "../ABI/SpendSaveHook.json";
 import tokenAbi from "../ABI/Token.json";
+import PositonDescAbi from "../ABI/PositionDescriptor.json"
+import PositionManAbi from "../ABI/PositionManager.json";
+import poolManagerAbi from "../ABI/PoolManager.json";
+import universalRouterAbi from "../ABI/UniversalRouter.json";
+import v4QuoterAbi from "../ABI/V4Quoter.json";
+import stateViewAbi from "../ABI/StateView.json";
 
 // Initialize public client
 export const getPublicClient = (chain: Chain = base) => {
@@ -102,6 +110,46 @@ export const getContracts = (chain: Chain = base) => {
     savingStrategy: getContractInstance(
       CONTRACT_ADDRESSES.SAVING_STRATEGY,
       savingStrategyAbi,
+      chain
+    ),
+    token: getContractInstance(
+      CONTRACT_ADDRESSES.TOKEN,
+      tokenAbi,
+      chain
+    ),
+    uniswapPoolManager: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER,
+      poolManagerAbi,
+      chain
+    ),
+    uniswapUniversalRouter: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_UNIVERSAL_ROUTER,
+      universalRouterAbi,
+      chain
+    ),
+    uniswapPoolSwapTest: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_SWAP_TEST,
+      poolSwapTestAbi,
+      chain
+    ),
+    uniswapV4Quoter: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_V4QUOTER,
+      v4QuoterAbi,
+      chain
+    ),
+    uniswapStateView: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_STATE_VIEW,
+      stateViewAbi,
+      chain
+    ),
+    uniswapPositionsManager: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POSITIONS_MANAGER,
+      PositionManAbi,
+      chain
+    ),
+    uniswapPositionsDescriptor: getContractInstance(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POSITIONS_DESCRIPTOR,
+      PositonDescAbi,
       chain
     ),
   };

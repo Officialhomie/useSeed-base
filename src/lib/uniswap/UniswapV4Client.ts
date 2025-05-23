@@ -24,6 +24,7 @@ import { encodeSpendSaveHookData } from './UniswapV4Integration'
 import { getSqrtPriceLimit } from './UniswapV4Integration'
 import type { HookFlags } from './types'
 import V4QuoterABI from '@/ABI/V4Quoter.json'
+import PoolManagerAbi from '@/ABI/PoolManager.json'
 import { BaseScanClient } from '../basescan/BaseScanClient'
 
 export interface QuoteResult {
@@ -926,94 +927,123 @@ export class UniswapV4Client {
       throw new Error('User address not available')
     }
 
-    const planner = new V4Planner()
-    let route: Route<Token, Token>
-    let trade: V4Trade<Token, Token, TradeType>
+    // const planner = new V4Planner()
+    // let route: Route<Token, Token>
+    // let trade: V4Trade<Token, Token, TradeType>
 
-    if (savingsPath && savingsPath.length > 1) {
-      const { buildSavingsConversionRoute } = await import('./routeBuilder')
-      route = await buildSavingsConversionRoute(this, savingsPath)
+    // if (savingsPath && savingsPath.length > 1) {
+    //   const { buildSavingsConversionRoute } = await import('./routeBuilder')
+    //   route = await buildSavingsConversionRoute(this, savingsPath)
 
-      const firstToken = SUPPORTED_TOKENS[savingsPath[0]] as Token
-      const amountInForRoute = CurrencyAmount.fromRawAmount(
-        firstToken,
-        ethers.utils.parseUnits(amountRaw, firstToken.decimals).toString(),
-      )
-      trade = await V4Trade.fromRoute(route, amountInForRoute, TradeType.EXACT_INPUT as TradeType)
-    } else if (savingsPath && savingsPath.length === 1) {
-      ;({ route, trade } = await this.getQuote(savingsPath[0], toToken, amountRaw))
+    //   const firstToken = SUPPORTED_TOKENS[savingsPath[0]] as Token
+    //   const amountInForRoute = CurrencyAmount.fromRawAmount(
+    //     firstToken,
+    //     ethers.utils.parseUnits(amountRaw, firstToken.decimals).toString(),
+    //   )
+    //   trade = await V4Trade.fromRoute(route, amountInForRoute, TradeType.EXACT_INPUT as TradeType)
+    // } else if (savingsPath && savingsPath.length === 1) {
+    //   ;({ route, trade } = await this.getQuote(savingsPath[0], toToken, amountRaw))
+    // } else {
+    //   ;({ route, trade } = await this.getQuote(fromToken, toToken, amountRaw))
+    // }
+
+    // // Create amount in for the trade parameters
+    // const amountIn = CurrencyAmount.fromRawAmount(
+    //   tokenA,
+    //   amountInRaw
+    // )
+
+    // // Encode hook data with spender address
+    // const hookData = encodeSpendSaveHookData(this.userAddress as `0x${string}`)
+
+    // // Determine hook flags – if disableSavings => turn everything off
+    // const finalHookFlags: HookFlags = disableSavings
+    //   ? { before: false, after: false, delta: false }
+    //   : { before: hookFlags?.before ?? true, after: hookFlags?.after ?? true, delta: hookFlags?.delta ?? true }
+
+    // const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
+    // const sqrtLimit = getSqrtPriceLimit(zeroForOne, slippageBps / 100)
+    const valueToSend = fromToken === 'ETH' ? ethers.utils.parseUnits(amountRaw, 18) : ethers.BigNumber.from(0);
+
+    // Create PoolManager contract instance instead of V4Planner
+    const poolManagerContract = new ethers.Contract(
+      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER,
+      PoolManagerAbi,
+      this.signer
+    );
+
+    // Create PoolKey structure
+    const [token0, token1] = tokenA.address.toLowerCase() < tokenB.address.toLowerCase() 
+      ? [tokenA.address, tokenB.address] 
+      : [tokenB.address, tokenA.address];
+    
+    const poolKey = {
+      currency0: token0,
+      currency1: token1,
+      fee: 3000, // 0.3% fee
+      tickSpacing: 60, // Standard tick spacing for 0.3% pools
+      hooks: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK
+    };
+
+    // Create SwapParams structure
+    const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase();
+    const sqrtLimit = getSqrtPriceLimit(zeroForOne, slippageBps / 100);
+    
+    const swapParams = {
+      zeroForOne: zeroForOne,
+      amountSpecified: `-${amountInRaw}`, // Negative for exact input
+      sqrtPriceLimitX96: sqrtLimit.toString()
+    };
+
+    // Encode hook data with user address
+    const hookData = encodeSpendSaveHookData(this.userAddress as `0x${string}`);
+
+    console.log('PHASE 1: Direct PoolManager.swap call', {
+      poolKey,
+      swapParams,
+      hookData,
+      valueToSend: valueToSend.toString()
+    });
+
+    let gasPrice: ethers.BigNumber | undefined
+    if (gasOverrideGwei !== undefined) {
+      gasPrice = ethers.utils.parseUnits(gasOverrideGwei.toString(), 'gwei')
     } else {
-      ;({ route, trade } = await this.getQuote(fromToken, toToken, amountRaw))
+      // lazy import to avoid circular deps
+      const { fetchOnChainGas, fetchFallbackGas } = await import('../gas/gasOracle')
+      try {
+        gasPrice = await fetchOnChainGas(this.provider)
+      } catch (_) {
+        gasPrice = await fetchFallbackGas()
+      }
     }
 
-    // Create amount in for the trade parameters
-    const amountIn = CurrencyAmount.fromRawAmount(
-      tokenA,
-      amountInRaw
-    )
+    // calculate conservative gasLimit
+    const { calculateV4SwapGasLimit } = await import('./UniswapV4Integration')
+    const { gasLimit } = calculateV4SwapGasLimit({
+      fromToken,
+      toToken,
+      value: parseFloat(amountRaw),
+      savingsTokenType: 0,
+      enableDCA: false,
+      disableSavings,
+    })
 
-    // Encode hook data with spender address
-    const hookData = encodeSpendSaveHookData(this.userAddress as `0x${string}`)
-
-    // Determine hook flags – if disableSavings => turn everything off
-    const finalHookFlags: HookFlags = disableSavings
-      ? { before: false, after: false, delta: false }
-      : { before: hookFlags?.before ?? true, after: hookFlags?.after ?? true, delta: hookFlags?.delta ?? true }
-
-    const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
-    const sqrtLimit = getSqrtPriceLimit(zeroForOne, slippageBps / 100)
 
     try {
-      // @ts-expect-error – swapCallParameters is part of experimental V4Planner typings
-      const { to, data, value } = planner.swapCallParameters({
-        route,
-        tradeType: trade.tradeType,
-        amount: amountIn.quotient.toString(),
-        slippageTolerance: new Percent(slippageBps, 10_000),
-        deadline: Math.floor(Date.now() / 1000) + deadlineSeconds,
-        sqrtPriceLimitX96: sqrtLimit,
-        hookOptions: {
-          beforeSwap: finalHookFlags.before,
-          afterSwap: finalHookFlags.after,
-          beforeSwapReturnsDelta: finalHookFlags.delta,
-          afterSwapReturnsDelta: finalHookFlags.delta,
-        },
+      const tx = await poolManagerContract.swap(
+        poolKey,
+        swapParams, 
         hookData,
-      })
-
-      let gasPrice: ethers.BigNumber | undefined
-      if (gasOverrideGwei !== undefined) {
-        gasPrice = ethers.utils.parseUnits(gasOverrideGwei.toString(), 'gwei')
-      } else {
-        // lazy import to avoid circular deps
-        const { fetchOnChainGas, fetchFallbackGas } = await import('../gas/gasOracle')
-        try {
-          gasPrice = await fetchOnChainGas(this.provider)
-        } catch (_) {
-          gasPrice = await fetchFallbackGas()
+        {
+          value: valueToSend,
+          gasPrice,
+          gasLimit
         }
-      }
-
-      // calculate conservative gasLimit
-      const { calculateV4SwapGasLimit } = await import('./UniswapV4Integration')
-      const { gasLimit } = calculateV4SwapGasLimit({
-        fromToken,
-        toToken,
-        value: parseFloat(amountRaw),
-        savingsTokenType: 0,
-        enableDCA: false,
-        disableSavings,
-      })
-
-      const tx: ethers.providers.TransactionRequest = {
-        to,
-        data,
-        value: fromToken === 'ETH' ? value : 0,
-        gasPrice,
-        gasLimit,
-      }
-
-      return this.signer.sendTransaction(tx)
+      );
+      
+      console.log('PHASE 1: Direct PoolManager.swap transaction sent:', tx.hash);
+      return tx;
     } catch (error) {
       console.error('Swap execution error:', error)
       throw error

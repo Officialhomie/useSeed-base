@@ -95,6 +95,11 @@ export default function Home() {
               <p className="section-description">
                 SpendSave protocol makes it easy to optimize your crypto savings and investments
               </p>
+              <div className="section-subtitle">
+                <span className="highlight">Powered by Uniswap V4</span>
+                <span className="separator">•</span>
+                <span className="highlight">Built on Base</span>
+              </div>
             </div>
             
             <div className="features-grid">
@@ -133,7 +138,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="subscription-section py-20">
+        {/* <section className="subscription-section py-20">
           <div className="section-container">
             <div className="section-header">
               <h2 className="section-title">
@@ -189,7 +194,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
+        </section> */}
       </main>
     </div>
   );

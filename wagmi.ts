@@ -145,12 +145,12 @@ const baseMainnetTransports = [
 
 // Create the Wagmi config with our transports
 export const config = createConfig({
-  chains: [base, baseSepolia], // Keep base first to prioritize it
+  chains: [base], // Keep base first to prioritize it
   connectors: [
     cbWalletConnector,
   ],
   transports: {
-    [baseSepolia.id]: fallback(baseSepoliaTransports),
+    // [baseSepolia.id]: fallback(baseSepoliaTransports),
     [base.id]: fallback(baseMainnetTransports)
   },
 });
