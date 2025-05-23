@@ -972,7 +972,7 @@ export class UniswapV4Client {
       this.signer
     );
 
-    // Create PoolKey structure
+    // Create hook-enabled pool key (CRITICAL: Must include hook address)
     const [token0, token1] = tokenA.address.toLowerCase() < tokenB.address.toLowerCase() 
       ? [tokenA.address, tokenB.address] 
       : [tokenB.address, tokenA.address];
@@ -995,8 +995,12 @@ export class UniswapV4Client {
       sqrtPriceLimitX96: sqrtLimit.toString()
     };
 
-    // Encode hook data with user address
-    const hookData = encodeSpendSaveHookData(this.userAddress as `0x${string}`);
+
+    // Properly encode user address in hookData using ABI encoding
+    const hookData = ethers.utils.defaultAbiCoder.encode(
+      ['address'],
+      [this.userAddress]
+    );
 
     console.log('PHASE 1: Direct PoolManager.swap call', {
       poolKey,
@@ -1042,8 +1046,8 @@ export class UniswapV4Client {
         }
       );
       
-      console.log('PHASE 1: Direct PoolManager.swap transaction sent:', tx.hash);
-      return tx;
+      console.log('✅ PHASE 1 SUCCESS: Direct PoolManager.swap transaction sent:', tx.hash);
+      console.log('Hook will automatically execute beforeSwap and afterSwap');      return tx;
     } catch (error) {
       console.error('Swap execution error:', error)
       throw error

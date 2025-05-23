@@ -9,7 +9,7 @@ import useDCAManagement from '@/lib/hooks/useDCAManagement';
 import useSpendSaveStrategy from '@/lib/hooks/useSpendSaveStrategy';
 import { useTokenList, Token } from '@/lib/hooks/useTokenList';
 import { useTokenBalances } from '@/lib/hooks/useTokenBalances';
-import { FiSettings, FiArrowDown, FiInfo, FiExternalLink, FiTarget } from 'react-icons/fi';
+import { FiSettings, FiArrowDown, FiInfo, FiExternalLink, FiTarget, FiAlertTriangle, FiCheckCircle, FiClock } from 'react-icons/fi';
 import SwapConfirmationModal from './SwapConfirmationModal';
 import SpendSaveEventListeners from './SpendSaveEventListeners';
 import { useNotification } from './NotificationManager';
@@ -22,6 +22,198 @@ import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
 import { cn } from '@/lib/utils';
 import SavingsSummary from './SavingsSummary';
 import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
+
+// ========== PHASE 2: Strategy Setup Modal Component ==========
+const StrategySetupModal = ({ 
+  isOpen, 
+  onClose, 
+  onSetupStrategy, 
+  isLoading = false 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSetupStrategy: (params: any) => Promise<void>;
+  isLoading?: boolean;
+}) => {
+  const [percentage, setPercentage] = useState(5); // Default 5%
+  const [savingsTokenType, setSavingsTokenType] = useState<0 | 1 | 2>(0); // INPUT
+  const [enableDCA, setEnableDCA] = useState(false);
+
+  const handleSetup = async () => {
+    try {
+      await onSetupStrategy({
+        percentage,
+        savingsTokenType,
+        enableDCA,
+        roundUpSavings: false,
+        autoIncrement: 0,
+        maxPercentage: percentage * 2 // Allow up to double the initial percentage
+      });
+      onClose();
+    } catch (error) {
+      console.error('Strategy setup failed:', error);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-gray-900 rounded-2xl shadow-xl p-6 m-4">
+        <h2 className="text-xl font-bold text-white mb-4">Set Up Savings Strategy</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Savings Percentage</label>
+            <div className="flex items-center space-x-3">
+              <input
+                type="range"
+                min="1"
+                max="25"
+                value={percentage}
+                onChange={(e) => setPercentage(parseInt(e.target.value))}
+                className="flex-1"
+              />
+              <span className="text-white w-12 text-center">{percentage}%</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Recommended: 5-10% for regular savings
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Savings Type</label>
+            <div className="space-y-2">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value={0}
+                  checked={savingsTokenType === 0}
+                  onChange={() => setSavingsTokenType(0)}
+                  className="mr-2"
+                />
+                <span className="text-white text-sm">Save from input token (before swap)</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value={1}
+                  checked={savingsTokenType === 1}
+                  onChange={() => setSavingsTokenType(1)}
+                  className="mr-2"
+                />
+                <span className="text-white text-sm">Save from output token (after swap)</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-gray-400">Enable DCA</label>
+            <input
+              type="checkbox"
+              checked={enableDCA}
+              onChange={(e) => setEnableDCA(e.target.checked)}
+              className="rounded"
+            />
+          </div>
+        </div>
+
+        <div className="flex space-x-4 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className="flex-1 py-3 rounded-xl font-bold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSetup}
+            disabled={isLoading}
+            className="flex-1 py-3 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 flex items-center justify-center"
+          >
+            {isLoading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Setting up...
+              </>
+            ) : (
+              'Set Up Strategy'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ========== PHASE 2: Strategy Status Banner Component ==========
+const StrategyStatusBanner = ({ 
+  validation, 
+  isValidating, 
+  onSetupStrategy,
+  disableSavings 
+}: {
+  validation: any;
+  isValidating: boolean;
+  onSetupStrategy: () => void;
+  disableSavings: boolean;
+}) => {
+  if (disableSavings || validation.isValid) return null;
+
+  const hasErrors = validation.errors.length > 0;
+  const hasWarnings = validation.warnings.length > 0;
+
+  return (
+    <div className={cn(
+      "mb-4 p-3 rounded-lg border",
+      hasErrors ? "bg-red-900/20 border-red-800/40" : "bg-yellow-900/20 border-yellow-800/40"
+    )}>
+      <div className="flex items-start space-x-2">
+        {isValidating ? (
+          <FiClock className="text-blue-400 mt-0.5 animate-pulse" />
+        ) : hasErrors ? (
+          <FiAlertTriangle className="text-red-400 mt-0.5" />
+        ) : (
+          <FiInfo className="text-yellow-400 mt-0.5" />
+        )}
+        
+        <div className="flex-1">
+          <h4 className={cn(
+            "text-sm font-medium mb-1",
+            hasErrors ? "text-red-400" : "text-yellow-400"
+          )}>
+            {isValidating ? 'Validating Strategy...' : 
+             hasErrors ? 'Strategy Setup Required' : 
+             'Strategy Warnings'}
+          </h4>
+          
+          {!isValidating && (
+            <div className="space-y-1">
+              {validation.errors.map((error: string, index: number) => (
+                <p key={index} className="text-sm text-red-300">{error}</p>
+              ))}
+              {validation.warnings.map((warning: string, index: number) => (
+                <p key={index} className="text-sm text-yellow-300">{warning}</p>
+              ))}
+            </div>
+          )}
+          
+          {validation.needsSetup && !isValidating && (
+            <button
+              onClick={onSetupStrategy}
+              className="mt-2 text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+            >
+              Set Up Savings Strategy
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function SwapWithSavings() {
   const { address, isConnected } = useAccount();
@@ -105,7 +297,14 @@ export default function SwapWithSavings() {
     gasEstimate,
     sizeCategory,
     estimatedGasLimit,
-    savingsPreview
+    savingsPreview,
+    // ========== PHASE 2: New strategy-related properties ==========
+    strategyValidation,
+    isValidatingStrategy,
+    isSettingUpStrategy,
+    setupStrategy,
+    canExecuteSwap,
+    strategySetupRequired
   } = useSwapWithSavings(swapParams);
   
   // Update estimated output amount when it changes
@@ -280,55 +479,117 @@ export default function SwapWithSavings() {
     return null;
   };
   
-  // Handle swap button click
+  // ========== PHASE 2: Strategy Setup Handler ==========
+  const handleStrategySetup = async (params: any) => {
+    try {
+      console.log('PHASE 2: Setting up strategy from UI:', params);
+      
+      const success = await setupStrategy(params);
+      
+      if (success) {
+        addNotification({
+          type: 'success',
+          title: 'Strategy Set Up',
+          message: `Savings strategy configured: ${params.percentage}% savings`
+        });
+        setShowStrategySetupModal(false);
+      }
+    } catch (error) {
+      console.error('PHASE 2: Strategy setup failed:', error);
+      addNotification({
+        type: 'error',
+        title: 'Strategy Setup Failed',
+        message: error instanceof Error ? error.message : 'Failed to set up strategy'
+      });
+    }
+  };
+
+  // ========== PHASE 2: Show strategy setup modal when needed ==========
+  const [showStrategySetupModal, setShowStrategySetupModal] = useState(false);
+  useEffect(() => {
+    if (strategySetupRequired && !showStrategySetupModal && !isValidatingStrategy) {
+      setShowStrategySetupModal(true);
+    }
+  }, [strategySetupRequired, showStrategySetupModal, isValidatingStrategy]);
+
+  // ========== PHASE 2: Enhanced Swap Button Handler ==========
   const handleSwapClick = () => {
     if (!isConnected || !fromAmount || parseFloat(fromAmount) <= 0) return;
     
-    // Add validation check
-    if (fromToken && fromToken.symbol === 'ETH' && !validateSwapAmount(fromAmount, tokenBalances.ETH.formattedBalance, true, calculateGasBuffer())) {
+    // PHASE 2: Check if strategy validation passed
+    if (!canExecuteSwap) {
+      if (strategySetupRequired) {
+        addNotification({
+          type: 'warning',
+          title: 'Strategy Setup Required',
+          message: 'Please set up your savings strategy before swapping.'
+        });
+        setShowStrategySetupModal(true);
+        return;
+      }
+      
+      if (strategyValidation.errors.length > 0) {
+        addNotification({
+          type: 'error',
+          title: 'Strategy Validation Failed',
+          message: strategyValidation.errors[0]
+        });
+        return;
+      }
+      
       addNotification({
-        type: 'error',
-        title: 'Insufficient Balance',
-        message: 'You need to leave $1 (0.0005411 ETH) for gas fees. Try using a smaller amount or the MAX button.'
+        type: 'warning',
+        title: 'Cannot Execute Swap',
+        message: 'Strategy validation in progress. Please wait.'
       });
       return;
     }
     
+    // Original validation
+    if (fromToken && fromToken.symbol === 'ETH' && tokenBalances) {
+      const amount = parseFloat(fromAmount);
+      const balance = parseFloat(tokenBalances.ETH.formattedBalance);
+      const gasBuffer = calculateGasBuffer();
+      
+      if (amount > balance - gasBuffer) {
+        addNotification({
+          type: 'error',
+          title: 'Insufficient Balance',
+          message: 'You need to leave $1 (0.0005411 ETH) for gas fees. Try using a smaller amount or the MAX button.'
+        });
+        return;
+      }
+    }
+    
     setShowConfirmation(true);
   };
-  
+
   // Handle confirmation
   const handleConfirmSwap = () => {
     setShowConfirmation(false);
-    
-    // Double-check validation before executing swap
-    if (validateSwapAmount(fromAmount, tokenBalances.ETH.formattedBalance, true, calculateGasBuffer())) {
-      executeSwap().catch(error => {
-        console.error("Swap execution error:", error);
-        
-        // Check if it's an "insufficient funds" error
-        if (error.message && error.message.includes("insufficient funds")) {
-          addNotification({
-            type: 'error',
-            title: 'Insufficient Funds',
-            message: 'You don\'t have enough ETH to cover this transaction. Try a smaller amount or the MAX button.'
-          });
-        } else {
-          // Generic error handling
-          addNotification({
-            type: 'error',
-            title: 'Transaction Failed',
-            message: 'The swap transaction failed. Please try again later.'
-          });
-        }
-      });
-    } else {
-      addNotification({
-        type: 'error',
-        title: 'Validation Failed',
-        message: 'Transaction validation failed. Please try a smaller amount.'
-      });
-    }
+    executeSwap().catch(error => {
+      console.error("PHASE 2: Swap execution error:", error);
+      if (error.message && error.message.includes("insufficient funds")) {
+        addNotification({
+          type: 'error',
+          title: 'Insufficient Funds',
+          message: 'You don\'t have enough ETH to cover this transaction. Try a smaller amount or the MAX button.'
+        });
+      } else if (error.message && error.message.includes("PHASE 2 Strategy Error:")) {
+        // Strategy-specific errors
+        addNotification({
+          type: 'error',
+          title: 'Strategy Error',
+          message: error.message.replace("PHASE 2 Strategy Error: ", "")
+        });
+      } else {
+        addNotification({
+          type: 'error',
+          title: 'Transaction Failed',
+          message: 'The swap transaction failed. Please try again later.'
+        });
+      }
+    });
   };
   
   // Event handlers
@@ -670,12 +931,34 @@ export default function SwapWithSavings() {
           </div>
         )}
         
-        {/* Swap Button */}
+        {/* ========== PHASE 2: Strategy Status Banner ========== */}
+        <StrategyStatusBanner
+          validation={strategyValidation}
+          isValidating={isValidatingStrategy}
+          onSetupStrategy={() => setShowStrategySetupModal(true)}
+          disableSavings={disableSavingsForThisSwap}
+        />
+        
+        {/* ========== PHASE 2: Enhanced Swap Button with Strategy Validation ========== */}
         <button
-          disabled={!fromToken || !toToken || !fromAmount || !isConnected || isSwapping || parseFloat(fromAmount) <= 0 || validationError !== null}
+          disabled={
+            !fromToken || 
+            !toToken || 
+            !fromAmount || 
+            !isConnected || 
+            isSwapping || 
+            parseFloat(fromAmount) <= 0 || 
+            validationError !== null ||
+            !canExecuteSwap || // PHASE 2: Strategy validation
+            isValidatingStrategy || // PHASE 2: Don't allow while validating
+            isSettingUpStrategy || // PHASE 2: Don't allow while setting up
+            executionStatus === 'validating-strategy' || // PHASE 2: Don't allow during validation
+            executionStatus === 'setting-strategy' // PHASE 2: Don't allow during setup
+          }
           onClick={handleSwapClick}
           className={`w-full py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-bold ${
-            fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0 && validationError === null
+            fromToken && toToken && fromAmount && isConnected && !isSwapping && parseFloat(fromAmount) > 0 && 
+            validationError === null && canExecuteSwap && !isValidatingStrategy && !isSettingUpStrategy
               ? "bg-blue-600 hover:bg-blue-500 text-white"
               : "bg-gray-700 text-gray-400 cursor-not-allowed"
           } transition-colors flex items-center justify-center`}
@@ -691,12 +974,20 @@ export default function SwapWithSavings() {
                   </svg>
                   Swapping...
                 </>
-              ) 
-              : !fromAmount || parseFloat(fromAmount) <= 0
-                ? "Enter an amount"
-                : validationError !== null
-                  ? "Insufficient balance"
-                  : "Swap"
+              )
+            : isValidatingStrategy || executionStatus === 'validating-strategy'
+              ? "Validating Strategy..."
+            : isSettingUpStrategy || executionStatus === 'setting-strategy'
+              ? "Setting Up Strategy..."
+            : !fromAmount || parseFloat(fromAmount) <= 0
+              ? "Enter an amount"
+            : validationError !== null
+              ? "Insufficient balance"
+            : strategySetupRequired
+              ? "Set Up Savings Strategy"
+            : !canExecuteSwap && strategyValidation.errors.length > 0
+              ? "Fix Strategy Issues"
+            : "Swap"
           }
         </button>
       </div>
@@ -734,6 +1025,16 @@ export default function SwapWithSavings() {
           onClose={() => setShowStrategyModal(false)}
           onStrategyChange={handleSaveStrategy}
           strategy={strategy}
+        />
+      )}
+      
+      {/* ========== PHASE 2: Strategy Setup Modal ========== */}
+      {showStrategySetupModal && (
+        <StrategySetupModal
+          isOpen={showStrategySetupModal}
+          onClose={() => setShowStrategySetupModal(false)}
+          onSetupStrategy={handleStrategySetup}
+          isLoading={isSettingUpStrategy}
         />
       )}
       
