@@ -373,7 +373,14 @@ export default function SwapWithSavings() {
     needsApprovals,
     approveAllTokens,
     refreshApprovals,
-    canProceedWithApprovals
+    canProceedWithApprovals,
+
+    realTimeEvents,
+    eventListenerStatus,
+    onSavingsProcessed,
+    onDCAQueued,
+    onSwapError,
+    cleanupEventListeners
   } = useSwapWithSavings(swapParams);
   
   // REMOVED: The useEffect that was trying to use estimatedOutput since we don't have quotes anymore
@@ -714,28 +721,40 @@ export default function SwapWithSavings() {
   };
   
   // Event handlers
-  const handleSavingsProcessed = (token: Address, amount: bigint) => {
-    const tokenInfo = tokens.find(t => t.address === token);
-    if (tokenInfo) {
-      addNotification({
-        type: 'success',
-        title: 'Savings Processed',
-        message: `Saved ${amount} ${tokenInfo.symbol}`
-      });
-    }
-  };
+  const handleSavingsProcessed = useCallback((data: any) => {
+    console.log('💰 PHASE 3: UI handling savings processed event:', data);
+    const tokenInfo = tokens.find(t => t.address === data.token);
+    const tokenSymbol = tokenInfo?.symbol || 'Unknown';
+    addNotification({
+      type: 'success',
+      title: 'Savings Processed',
+      message: `Saved ${data.formattedAmount || data.amount} ${tokenSymbol}`,
+    });
+  }, [tokens, addNotification]);
+
   
-  const handleDCAQueued = (fromToken: Address, toToken: Address, amount: bigint) => {
-    const fromTokenInfo = tokens.find(t => t.address === fromToken);
-    const toTokenInfo = tokens.find(t => t.address === toToken);
+  
+  const handleDCAQueued = useCallback((data: any) => {
+    console.log('🔄 PHASE 3: UI handling DCA queued event:', data);
+    const fromTokenInfo = tokens.find(t => t.address === data.fromToken);
+    const toTokenInfo = tokens.find(t => t.address === data.toToken);
     if (fromTokenInfo && toTokenInfo) {
       addNotification({
         type: 'success',
         title: 'DCA Queued',
-        message: `Queued ${amount} ${fromTokenInfo.symbol} for conversion to ${toTokenInfo.symbol}`
+        message: `Queued ${data.amount} ${fromTokenInfo.symbol} for conversion to ${toTokenInfo.symbol}`,
       });
     }
-  };
+  }, [tokens, addNotification]);
+
+  const handleSwapError = useCallback((data: any) => {
+    console.error('❌ PHASE 3: UI handling swap error event:', data);
+    addNotification({
+      type: 'error',
+      title: 'Swap Processing Error',
+      message: `Hook error: ${data.reason}`,
+    });
+  }, [addNotification]);
 
   // Add this function to handle strategy saving
   const handleSaveStrategy = (newStrategy: any) => {
@@ -743,6 +762,25 @@ export default function SwapWithSavings() {
     console.log('Saving strategy:', newStrategy);
     setShowStrategyModal(false);
   };
+
+  useEffect(() => {
+    if (onSavingsProcessed && onDCAQueued && onSwapError) {
+      console.log('🎧 PHASE 3: Setting up UI event listeners...');
+      onSavingsProcessed(handleSavingsProcessed);
+      onDCAQueued(handleDCAQueued);
+      onSwapError(handleSwapError);
+    }
+  }, [onSavingsProcessed, onDCAQueued, onSwapError, handleSavingsProcessed, handleDCAQueued, handleSwapError]);
+  
+  // PHASE 3: Cleanup event listeners when component unmounts
+  useEffect(() => {
+    return () => {
+      if (cleanupEventListeners) {
+        console.log('🧹 PHASE 3: Component cleanup - removing event listeners');
+        cleanupEventListeners();
+      }
+    };
+  }, [cleanupEventListeners]);
 
   // Set initial tokens once loaded
   useEffect(() => {
@@ -1045,6 +1083,36 @@ export default function SwapWithSavings() {
           </div>
         )}
         
+        {eventListenerStatus === 'listening' && (
+          <div className="mt-4 p-3 rounded-lg text-sm bg-blue-900/20 border border-blue-800/40">
+            <div className="flex items-center">
+              <div className="animate-pulse w-2 h-2 bg-blue-400 rounded-full mr-2"></div>
+              <div className="font-medium text-blue-400">Monitoring Real-time Events</div>
+            </div>
+            <div className="text-xs text-blue-300 mt-1">
+              Listening for savings processing and DCA events...
+            </div>
+          </div>
+        )}
+
+        {/* PHASE 3: Real-time events display */}
+        {realTimeEvents.length > 0 && (
+          <div className="mt-4 p-3 rounded-lg text-sm bg-green-900/20 border border-green-800/40">
+            <div className="font-medium text-green-400 mb-2">Real-time Events ({realTimeEvents.length})</div>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {realTimeEvents.slice(-3).map((event, index) => (
+                <div key={index} className="text-xs text-green-300 flex items-center">
+                  <span className="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
+                  <span>{event.eventName}</span>
+                  <span className="ml-auto text-gray-400">
+                    {new Date(event.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Show any transaction errors */}
         {error && (
           <div className={cn(

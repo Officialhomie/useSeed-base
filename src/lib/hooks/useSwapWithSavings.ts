@@ -25,6 +25,13 @@ interface StrategyValidationResult {
   recommendations: string[];
 }
 
+interface RealTimeEventData {
+  eventName: string;
+  data: any;
+  timestamp: number;
+  processed: boolean;
+}
+
 // Add strategy validation error types
 type StrategyValidationError = 
   | 'STRATEGY_NOT_CONFIGURED'
@@ -90,6 +97,13 @@ interface SwapWithSavingsResult {
   approveAllTokens: () => Promise<boolean>;
   refreshApprovals: () => Promise<void>;
   canProceedWithApprovals: boolean;
+
+  realTimeEvents: RealTimeEventData[];
+  eventListenerStatus: 'inactive' | 'listening' | 'completed' | 'error';
+  onSavingsProcessed?: (callback: (data: any) => void) => void;
+  onDCAQueued?: (callback: (data: any) => void) => void;
+  onSwapError?: (callback: (data: any) => void) => void;
+  cleanupEventListeners?: () => void;
 }
 
 /**
@@ -127,6 +141,10 @@ export default function useSwapWithSavings(
   // PHASE 2: Add strategy validation state tracking
   const [strategyValidationError, setStrategyValidationError] = useState<StrategyValidationError | null>(null);
   const [lastValidationTimestamp, setLastValidationTimestamp] = useState<number>(0);
+
+  const [realTimeEvents, setRealTimeEvents] = useState<RealTimeEventData[]>([]);
+  const [eventListenerStatus, setEventListenerStatus] = useState<'inactive' | 'listening' | 'completed' | 'error'>('inactive');
+  const [eventCleanupFunction, setEventCleanupFunction] = useState<(() => void) | null>(null);
 
   // ========== DERIVED VALUES ==========
   const fromToken = props?.fromToken || 'ETH';
@@ -177,6 +195,101 @@ export default function useSwapWithSavings(
     overridePercentage,
     disableSavings
   );
+
+  // ========== REAL-TIME EVENT LISTENING ==========
+  const addEventCallback = useCallback((eventName: string, callback: (data: any) => void) => {
+    if (client) {
+      // Add callback to UniswapV4Client's event system
+      const eventCallbacks = (client as any).eventCallbacks;
+      if (eventCallbacks) {
+        if (!eventCallbacks.has(eventName)) {
+          eventCallbacks.set(eventName, []);
+        }
+        eventCallbacks.get(eventName).push(callback);
+      }
+    }
+  }, [client]);
+
+  const onSavingsProcessed = useCallback((callback: (data: any) => void) => {
+    addEventCallback('OutputSavingsProcessed', (data) => {
+      console.log('💰 PHASE 3: Savings processed callback triggered:', data);
+      setRealTimeEvents(prev => [...prev, {
+        eventName: 'OutputSavingsProcessed',
+        data,
+        timestamp: Date.now(),
+        processed: false
+      }]);
+      callback(data);
+    });
+    
+    addEventCallback('InputTokenSaved', (data) => {
+      console.log('💰 PHASE 3: Input token saved callback triggered:', data);
+      setRealTimeEvents(prev => [...prev, {
+        eventName: 'InputTokenSaved',
+        data,
+        timestamp: Date.now(),
+        processed: false
+      }]);
+      callback(data);
+    });
+  }, [addEventCallback]);
+
+  const onDCAQueued = useCallback((callback: (data: any) => void) => {
+    addEventCallback('SpecificTokenSwapQueued', (data) => {
+      console.log('🔄 PHASE 3: DCA queued callback triggered:', data);
+      setRealTimeEvents(prev => [...prev, {
+        eventName: 'SpecificTokenSwapQueued',
+        data,
+        timestamp: Date.now(),
+        processed: false
+      }]);
+      callback(data);
+    });
+  }, [addEventCallback]);
+
+  const onSwapError = useCallback((callback: (data: any) => void) => {
+    addEventCallback('AfterSwapError', (data) => {
+      console.error('❌ PHASE 3: Swap error callback triggered:', data);
+      setRealTimeEvents(prev => [...prev, {
+        eventName: 'AfterSwapError',
+        data,
+        timestamp: Date.now(),
+        processed: false
+      }]);
+      callback(data);
+    });
+
+    addEventCallback('BeforeSwapError', (data) => {
+      console.error('❌ PHASE 3: Before swap error callback triggered:', data);
+      setRealTimeEvents(prev => [...prev, {
+        eventName: 'BeforeSwapError',
+        data,
+        timestamp: Date.now(),
+        processed: false
+      }]);
+      callback(data);
+    });
+  }, [addEventCallback]);
+
+  const cleanupEventListeners = useCallback(() => {
+    console.log('🧹 PHASE 3: Cleaning up event listeners from hook...');
+    if (eventCleanupFunction) {
+      eventCleanupFunction();
+      setEventCleanupFunction(null);
+    }
+    setEventListenerStatus('completed');
+    setRealTimeEvents([]);
+  }, [eventCleanupFunction]);
+
+  // PHASE 3: Auto-cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (eventCleanupFunction) {
+        console.log('🧹 PHASE 3: Auto-cleanup on unmount');
+        eventCleanupFunction();
+      }
+    };
+  }, [eventCleanupFunction]);
 
   // ========== TRANSACTION RECEIPT MONITORING ==========
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({
@@ -729,6 +842,13 @@ export default function useSwapWithSavings(
     needsApprovals,
     approveAllTokens,
     refreshApprovals,
-    canProceedWithApprovals
+    canProceedWithApprovals,
+
+    realTimeEvents,
+    eventListenerStatus,
+    onSavingsProcessed,
+    onDCAQueued,
+    onSwapError,
+    cleanupEventListeners
   };
 }

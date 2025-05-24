@@ -36,6 +36,25 @@ interface SwapExecutionResult extends ethers.providers.TransactionResponse {
     savingsProcessed: boolean;
     errors: string[];
   };
+  eventListeners?: {
+    cleanup: () => void;
+    status: 'listening' | 'completed' | 'error';
+    eventsReceived: string[];
+  };
+  realTimeEvents?: {
+    onSavingsProcessed?: (data: any) => void;
+    onDCAQueued?: (data: any) => void;
+    onError?: (error: any) => void;
+    onComplete?: () => void;
+  };
+}
+
+interface EventListenerManager {
+  startListening: () => void;
+  stopListening: () => void;
+  getStatus: () => 'inactive' | 'listening' | 'completed' | 'error';
+  getEventsReceived: () => string[];
+  addEventCallback: (eventName: string, callback: (data: any) => void) => void;
 }
 
 // Create a custom tick data provider to avoid "No tick data provider was given" error
@@ -138,6 +157,9 @@ export class UniswapV4Client {
   private baseScanClient: BaseScanClient;
   private isInitialized: boolean = false;
   private networkStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
+
+  private activeEventListeners: Map<string, EventListenerManager> = new Map();
+  private eventCallbacks: Map<string, Array<(data: any) => void>> = new Map();
 
   constructor(provider: ethers.providers.Provider, signer?: ethers.Signer) {
     this.provider = provider
@@ -440,6 +462,261 @@ export class UniswapV4Client {
     }
   }
 
+  private async setupRealTimeEventListeners(
+    fromToken: SupportedTokenSymbol,
+    toToken: SupportedTokenSymbol
+  ): Promise<EventListenerManager> {
+    console.log('🎧 PHASE 3: Setting up real-time event listeners...');
+    
+    const spendSaveHook = new ethers.Contract(
+      CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+      SpendSaveHookAbi,
+      this.provider
+    );
+    
+    const savingStrategy = new ethers.Contract(
+      CONTRACT_ADDRESSES.SAVING_STRATEGY,
+      SavingStrategyAbi,
+      this.provider
+    );
+  
+    let status: 'inactive' | 'listening' | 'completed' | 'error' = 'inactive';
+    let eventsReceived: string[] = [];
+    const eventListeners: Array<() => void> = [];
+  
+    const manager: EventListenerManager = {
+      startListening: () => {
+        if (status === 'listening') return;
+        
+        console.log('🎧 PHASE 3: Starting real-time event monitoring...');
+        status = 'listening';
+  
+        // Event handlers
+        const onOutputSavingsProcessed = (user: string, token: string, amount: ethers.BigNumber, event: any) => {
+          console.log('💰 PHASE 3: OutputSavingsProcessed event received:', {
+            user, token, amount: amount.toString(), blockNumber: event.blockNumber
+          });
+          eventsReceived.push('OutputSavingsProcessed');
+          this.triggerEventCallback('OutputSavingsProcessed', {
+            user, token, amount: amount.toString(),
+            formattedAmount: ethers.utils.formatEther(amount), event
+          });
+        };
+  
+        const onInputTokenSaved = (user: string, token: string, savedAmount: ethers.BigNumber, remainingAmount: ethers.BigNumber, event: any) => {
+          console.log('💰 PHASE 3: InputTokenSaved event received:', { user, token, savedAmount: savedAmount.toString() });
+          eventsReceived.push('InputTokenSaved');
+          this.triggerEventCallback('InputTokenSaved', {
+            user, token, savedAmount: savedAmount.toString(), remainingAmount: remainingAmount.toString(), event
+          });
+        };
+  
+        const onSpecificTokenSwapQueued = (user: string, fromTokenAddr: string, toTokenAddr: string, amount: ethers.BigNumber, event: any) => {
+          console.log('🔄 PHASE 3: SpecificTokenSwapQueued event received:', { user, fromToken: fromTokenAddr, toToken: toTokenAddr });
+          eventsReceived.push('SpecificTokenSwapQueued');
+          this.triggerEventCallback('SpecificTokenSwapQueued', {
+            user, fromToken: fromTokenAddr, toToken: toTokenAddr, amount: amount.toString(), event
+          });
+        };
+  
+        const onAfterSwapError = (user: string, reason: string, event: any) => {
+          console.error('❌ PHASE 3: AfterSwapError event received:', { user, reason });
+          eventsReceived.push('AfterSwapError');
+          status = 'error';
+          this.triggerEventCallback('AfterSwapError', { user, reason, event });
+        };
+  
+        const onBeforeSwapError = (user: string, reason: string, event: any) => {
+          console.error('❌ PHASE 3: BeforeSwapError event received:', { user, reason });
+          eventsReceived.push('BeforeSwapError');
+          status = 'error';
+          this.triggerEventCallback('BeforeSwapError', { user, reason, event });
+        };
+  
+        const onAfterSwapExecuted = (user: string, delta: any, event: any) => {
+          console.log('✅ PHASE 3: AfterSwapExecuted event received:', { user, delta: delta.toString() });
+          eventsReceived.push('AfterSwapExecuted');
+          this.triggerEventCallback('AfterSwapExecuted', { user, delta: delta.toString(), event });
+        };
+  
+        const onSavingsProcessedSuccessfully = (user: string, token: string, amount: ethers.BigNumber, event: any) => {
+          console.log('✅ PHASE 3: SavingsProcessedSuccessfully event received:', { user, token, amount: amount.toString() });
+          eventsReceived.push('SavingsProcessedSuccessfully');
+          this.triggerEventCallback('SavingsProcessedSuccessfully', { user, token, amount: amount.toString(), event });
+        };
+  
+        // Set up event listeners with user filter
+        const userFilter = this.userAddress ? [this.userAddress] : undefined;
+  
+        spendSaveHook.on(spendSaveHook.filters.OutputSavingsProcessed(userFilter), onOutputSavingsProcessed);
+        spendSaveHook.on(spendSaveHook.filters.SpecificTokenSwapQueued(userFilter), onSpecificTokenSwapQueued);
+        spendSaveHook.on(spendSaveHook.filters.AfterSwapError(userFilter), onAfterSwapError);
+        spendSaveHook.on(spendSaveHook.filters.BeforeSwapError(userFilter), onBeforeSwapError);
+        spendSaveHook.on(spendSaveHook.filters.AfterSwapExecuted(userFilter), onAfterSwapExecuted);
+  
+        savingStrategy.on(savingStrategy.filters.InputTokenSaved(userFilter), onInputTokenSaved);
+        savingStrategy.on(savingStrategy.filters.SavingsProcessedSuccessfully(userFilter), onSavingsProcessedSuccessfully);
+  
+        // Store cleanup functions
+        eventListeners.push(
+          () => spendSaveHook.removeAllListeners(),
+          () => savingStrategy.removeAllListeners()
+        );
+  
+        console.log('🎧 PHASE 3: Event listeners configured for user:', this.userAddress);
+      },
+  
+      stopListening: () => {
+        console.log('🔇 PHASE 3: Stopping event listeners...');
+        eventListeners.forEach(cleanup => cleanup());
+        status = 'completed';
+      },
+  
+      getStatus: () => status,
+      getEventsReceived: () => [...eventsReceived],
+      addEventCallback: (eventName: string, callback: (data: any) => void) => {
+        if (!this.eventCallbacks.has(eventName)) {
+          this.eventCallbacks.set(eventName, []);
+        }
+        this.eventCallbacks.get(eventName)!.push(callback);
+      }
+    };
+  
+    // Store the manager for cleanup
+    const managerId = `${fromToken}-${toToken}-${Date.now()}`;
+    this.activeEventListeners.set(managerId, manager);
+  
+    return manager;
+  }
+
+  private triggerEventCallback(eventName: string, data: any): void {
+    const callbacks = this.eventCallbacks.get(eventName);
+    if (callbacks) {
+      callbacks.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in event callback for ${eventName}:`, error);
+        }
+      });
+    }
+  }
+
+  private cleanupEventListeners(): void {
+    console.log('🧹 PHASE 3: Cleaning up all event listeners...');
+    this.activeEventListeners.forEach(manager => {
+      manager.stopListening();
+    });
+    this.activeEventListeners.clear();
+    this.eventCallbacks.clear();
+  }
+
+  private async verifyHookExecutionWithEvents(
+    tx: ethers.providers.TransactionResponse,
+    fromToken: SupportedTokenSymbol,
+    toToken: SupportedTokenSymbol,
+    eventManager: EventListenerManager
+  ): Promise<{
+    beforeSwapExecuted: boolean;
+    afterSwapExecuted: boolean;
+    savingsProcessed: boolean;
+    errors: string[];
+    realTimeEvents: string[];
+    eventDetails: any[];
+  }> {
+    const result = {
+      beforeSwapExecuted: false,
+      afterSwapExecuted: false,
+      savingsProcessed: false,
+      errors: [] as string[],
+      realTimeEvents: [] as string[],
+      eventDetails: [] as any[]
+    };
+    
+    try {
+      console.log('⏳ PHASE 3: Waiting for transaction receipt with event monitoring...');
+      const receipt = await tx.wait();
+      
+      if (receipt.status !== 1) {
+        result.errors.push('Transaction failed');
+        return result;
+      }
+      
+      console.log('📄 PHASE 3: Transaction confirmed, analyzing events and real-time data...');
+      
+      // Get real-time events received during transaction
+      result.realTimeEvents = eventManager.getEventsReceived();
+      
+      // Continue with original verification logic
+      const spendSaveHook = new ethers.Contract(
+        CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+        SpendSaveHookAbi,
+        this.provider
+      );
+      
+      const parsedEvents = receipt.logs
+        .map(log => {
+          try {
+            return spendSaveHook.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .filter(event => event !== null);
+      
+      console.log('🔍 PHASE 3: Hook events found in receipt:', parsedEvents.map(e => e?.name));
+      console.log('🎧 PHASE 3: Real-time events received:', result.realTimeEvents);
+      
+      // Verify events match between receipt and real-time listeners
+      const afterSwapEvent = parsedEvents.find(e => e?.name === 'AfterSwapExecuted');
+      if (afterSwapEvent || result.realTimeEvents.includes('AfterSwapExecuted')) {
+        result.afterSwapExecuted = true;
+        console.log('✅ PHASE 3: AfterSwap hook executed (verified via events)');
+      }
+      
+      const savingsEvents = parsedEvents.filter(e => 
+        e?.name === 'OutputSavingsProcessed' || 
+        e?.name === 'InputTokenSaved' ||
+        e?.name === 'SavingsProcessedSuccessfully'
+      );
+      
+      const realTimeSavingsEvents = result.realTimeEvents.filter(e =>
+        e === 'OutputSavingsProcessed' || 
+        e === 'InputTokenSaved' ||
+        e === 'SavingsProcessedSuccessfully'
+      );
+      
+      if (savingsEvents.length > 0 || realTimeSavingsEvents.length > 0) {
+        result.savingsProcessed = true;
+        console.log('💰 PHASE 3: Savings processing confirmed via events:', {
+          receiptEvents: savingsEvents.length,
+          realTimeEvents: realTimeSavingsEvents.length
+        });
+      }
+      
+      // BeforeSwap verification
+      if (result.afterSwapExecuted) {
+        result.beforeSwapExecuted = true;
+      }
+      
+      // Final validation
+      if (!result.afterSwapExecuted) {
+        result.errors.push('AfterSwap hook did not execute - savings may not have been processed');
+      }
+      
+      if (!result.savingsProcessed && result.afterSwapExecuted) {
+        result.errors.push('Hook executed but no savings events detected');
+      }
+      
+    } catch (error) {
+      const errorMsg = `PHASE 3 Hook verification failed: ${error instanceof Error ? error.message : String(error)}`;
+      result.errors.push(errorMsg);
+      console.error('❌', errorMsg);
+    }
+    
+    return result;
+  }
+
   async executeSwap(params: {
     fromToken: SupportedTokenSymbol
     toToken: SupportedTokenSymbol
@@ -569,7 +846,11 @@ export class UniswapV4Client {
     })
 
     try {
-      console.log('🚀 Executing PoolManager.swap with hook validation...');
+      console.log('🚀 PHASE 3: Executing PoolManager.swap with real-time event listening...');
+      
+      // PHASE 3: Set up real-time event listeners before transaction
+      const eventManager = await this.setupRealTimeEventListeners(fromToken, toToken);
+      
       const tx = await poolManagerContract.swap(
         poolKey,
         swapParams, 
@@ -582,14 +863,23 @@ export class UniswapV4Client {
       );
       
       console.log('✅ PoolManager.swap transaction sent:', tx.hash);
+      console.log('🎧 PHASE 3: Event listeners active, monitoring for savings events...');
       
-      // PHASE 1: Post-swap hook verification
+      // PHASE 3: Start monitoring events immediately
+      eventManager.startListening();
+      
+      // PHASE 1: Post-swap hook verification (enhanced with event data)
       if (!disableSavings) {
-        console.log('🔍 PHASE 1: Starting hook execution verification...');
-        const hookStatus = await this.verifyHookExecution(tx, fromToken, toToken);
+        console.log('🔍 PHASE 1+3: Starting hook execution verification with event monitoring...');
+        const hookStatus = await this.verifyHookExecutionWithEvents(tx, fromToken, toToken, eventManager);
         
-        // Enhance transaction object with hook status
+        // Enhance transaction object with hook status and event management
         (tx as SwapExecutionResult).hookExecutionStatus = hookStatus;
+        (tx as SwapExecutionResult).eventListeners = {
+          cleanup: () => eventManager.stopListening(),
+          status: eventManager.getStatus() as 'listening' | 'completed' | 'error',
+          eventsReceived: eventManager.getEventsReceived()
+        };
         
         if (hookStatus.errors.length > 0) {
           console.warn('⚠️ Hook execution issues detected:', hookStatus.errors);
@@ -601,6 +891,8 @@ export class UniswapV4Client {
       return tx as SwapExecutionResult;
     } catch (error) {
       console.error('❌ Swap execution error:', error)
+      // PHASE 3: Clean up event listeners on error
+      this.cleanupEventListeners();
       throw error
     }
   }
