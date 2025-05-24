@@ -23,7 +23,20 @@ import { encodeSpendSaveHookData } from './UniswapV4Integration'
 import { getSqrtPriceLimit } from './UniswapV4Integration'
 import type { HookFlags } from './types'
 import PoolManagerAbi from '@/abi/core/PoolManager.json'
+import SavingStrategyAbi from '@/abi/savings/SavingStrategy.json'
+import SpendSaveHookAbi from '@/abi/core/SpendSaveHook.json'
 import { BaseScanClient } from '../basescan/BaseScanClient'
+import SpendSaveHookABI from '@/abi/core/SpendSaveHook.json'
+
+// Add interface for enhanced transaction result
+interface SwapExecutionResult extends ethers.providers.TransactionResponse {
+  hookExecutionStatus?: {
+    beforeSwapExecuted: boolean;
+    afterSwapExecuted: boolean;
+    savingsProcessed: boolean;
+    errors: string[];
+  };
+}
 
 // Create a custom tick data provider to avoid "No tick data provider was given" error
 class SimpleTickDataProvider {
@@ -154,6 +167,69 @@ export class UniswapV4Client {
     } catch (error) {
       console.error('Network detection error:', error);
       this.networkStatus = 'disconnected';
+    }
+  }
+
+  /**
+   * PHASE 1: Verify SpendSaveHook Integration
+   * Confirms that the SpendSaveHook is properly initialized and accessible
+   */
+  async verifyHookIntegration(): Promise<boolean> {
+    try {
+      console.log('🔍 Phase 1: Verifying SpendSaveHook integration...');
+      
+
+      const hookContract = new ethers.Contract(
+        CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+        SpendSaveHookABI,
+        this.provider
+      );
+
+      // Check if hook is initialized
+      let isHookInitialized = false;
+      try {
+        isHookInitialized = await hookContract.isInitialized();
+        console.log(`✅ Hook initialization status: ${isHookInitialized}`);
+      } catch (error) {
+        console.warn('⚠️ Could not verify hook initialization (method may not exist), assuming initialized');
+        // If the method doesn't exist, we'll assume the hook is functioning
+        // This is a fallback for hooks that might not implement this specific method
+        isHookInitialized = true;
+      }
+
+      // Additional verification: Check if we can interact with the hook contract
+      try {
+        const hookCode = await this.provider.getCode(CONTRACT_ADDRESSES.SPEND_SAVE_HOOK);
+        const hasCode = hookCode !== '0x' && hookCode !== '0x0';
+        console.log(`✅ Hook contract has code deployed: ${hasCode}`);
+        
+        if (!hasCode) {
+          console.error('❌ SpendSaveHook contract has no code at address:', CONTRACT_ADDRESSES.SPEND_SAVE_HOOK);
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Error checking hook contract code:', error);
+        return false;
+      }
+
+      // Verify user-specific hook functionality if user address is available
+      if (this.userAddress) {
+        try {
+          const canProcess = await hookContract.canProcessSavings(this.userAddress);
+          console.log(`✅ Hook can process savings for user ${this.userAddress}: ${canProcess}`);
+        } catch (error) {
+          console.warn('⚠️ Could not verify user-specific hook functionality (method may not exist)');
+          // This is not critical - the hook might not implement this specific method
+        }
+      }
+
+      const overallStatus = isHookInitialized;
+      console.log(`🎯 Phase 1 Result: Hook integration verified = ${overallStatus}`);
+      
+      return overallStatus;
+    } catch (error) {
+      console.error('❌ Phase 1: Hook integration verification failed:', error);
+      return false;
     }
   }
 
@@ -374,8 +450,20 @@ export class UniswapV4Client {
     hookFlags?: HookFlags
     savingsPath?: SupportedTokenSymbol[]
     disableSavings?: boolean
-  }): Promise<ethers.providers.TransactionResponse> {
+  }): Promise<SwapExecutionResult> {
     if (!this.signer) throw new Error('Signer not initialised')
+
+    // PHASE 1: Verify hook integration before proceeding with swap
+    console.log('🚀 Starting swap execution with Phase 1 verification...');
+    const isHookReady = await this.verifyHookIntegration();
+    
+    if (!isHookReady) {
+      const errorMsg = 'SpendSave hook integration verification failed. Cannot proceed with swap.';
+      console.error('❌', errorMsg);
+      throw new Error(errorMsg);
+    }
+    
+    console.log('✅ Phase 1: Hook verification passed, proceeding with swap...');
 
     const {
       fromToken,
@@ -403,6 +491,12 @@ export class UniswapV4Client {
 
     if (!this.userAddress) {
       throw new Error('User address not available')
+    }
+
+    // PHASE 1: Pre-swap strategy validation
+    if (!disableSavings) {
+      console.log('🔍 PHASE 1: Validating user savings strategy...');
+      await this.validateUserStrategy();
     }
 
     const valueToSend = fromToken === 'ETH' ? ethers.utils.parseUnits(amountRaw, 18) : ethers.BigNumber.from(0);
@@ -475,6 +569,7 @@ export class UniswapV4Client {
     })
 
     try {
+      console.log('🚀 Executing PoolManager.swap with hook validation...');
       const tx = await poolManagerContract.swap(
         poolKey,
         swapParams, 
@@ -486,13 +581,188 @@ export class UniswapV4Client {
         }
       );
       
-      console.log('✅ Direct PoolManager.swap transaction sent:', tx.hash);
-      console.log('Hook will automatically execute beforeSwap and afterSwap');
-      return tx;
+      console.log('✅ PoolManager.swap transaction sent:', tx.hash);
+      
+      // PHASE 1: Post-swap hook verification
+      if (!disableSavings) {
+        console.log('🔍 PHASE 1: Starting hook execution verification...');
+        const hookStatus = await this.verifyHookExecution(tx, fromToken, toToken);
+        
+        // Enhance transaction object with hook status
+        (tx as SwapExecutionResult).hookExecutionStatus = hookStatus;
+        
+        if (hookStatus.errors.length > 0) {
+          console.warn('⚠️ Hook execution issues detected:', hookStatus.errors);
+        } else {
+          console.log('✅ All hooks executed successfully');
+        }
+      }
+      
+      return tx as SwapExecutionResult;
     } catch (error) {
-      console.error('Swap execution error:', error)
+      console.error('❌ Swap execution error:', error)
       throw error
     }
+  }
+
+  /**
+   * PHASE 1: Validate user has configured savings strategy
+   */
+  private async validateUserStrategy(): Promise<void> {
+    try {
+      const savingStrategyContract = new ethers.Contract(
+        CONTRACT_ADDRESSES.SAVING_STRATEGY,
+        SavingStrategyAbi,
+        this.signer
+      );
+      
+      console.log('📋 Checking user strategy for:', this.userAddress);
+      const userStrategy = await savingStrategyContract.getUserSavingStrategy(this.userAddress);
+      
+      // Check if user has configured a savings percentage
+      if (!userStrategy.percentage || userStrategy.percentage.eq(0)) {
+        throw new Error('STRATEGY_NOT_CONFIGURED: No savings percentage configured. Please set up your savings strategy before swapping.');
+      }
+      
+      // Validate strategy configuration
+      const percentageValue = userStrategy.percentage.toNumber();
+      if (percentageValue < 100) { // Less than 1% (since it's in basis points)
+        console.warn('⚠️ Very low savings percentage:', percentageValue / 100, '%');
+      }
+      
+      if (percentageValue > 5000) { // More than 50%
+        throw new Error('STRATEGY_INVALID: Savings percentage too high (>50%). Please reduce for safety.');
+      }
+      
+      // Check specific token configuration if needed
+      if (userStrategy.savingsTokenType === 2) { // SPECIFIC token type
+        if (!userStrategy.specificSavingsToken || userStrategy.specificSavingsToken === ethers.constants.AddressZero) {
+          throw new Error('STRATEGY_INCOMPLETE: Specific savings token not configured. Please set a target token.');
+        }
+      }
+      
+      console.log('✅ Strategy validation passed:', {
+        percentage: percentageValue / 100 + '%',
+        type: userStrategy.savingsTokenType,
+        roundUp: userStrategy.roundUpSavings,
+        enableDCA: userStrategy.enableDCA
+      });
+      
+    } catch (error) {
+      console.error('❌ Strategy validation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * PHASE 1: Verify hook execution after swap transaction
+   */
+  private async verifyHookExecution(
+    tx: ethers.providers.TransactionResponse,
+    fromToken: SupportedTokenSymbol,
+    toToken: SupportedTokenSymbol
+  ): Promise<{
+    beforeSwapExecuted: boolean;
+    afterSwapExecuted: boolean;
+    savingsProcessed: boolean;
+    errors: string[];
+  }> {
+    const result = {
+      beforeSwapExecuted: false,
+      afterSwapExecuted: false,
+      savingsProcessed: false,
+      errors: [] as string[]
+    };
+    
+    try {
+      console.log('⏳ Waiting for transaction receipt...');
+      const receipt = await tx.wait();
+      
+      if (receipt.status !== 1) {
+        result.errors.push('Transaction failed');
+        return result;
+      }
+      
+      console.log('📄 Transaction confirmed, analyzing events...');
+      
+      // Create contract instance for event parsing
+      const spendSaveHook = new ethers.Contract(
+        CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+        SpendSaveHookAbi,
+        this.provider
+      );
+      
+      // Parse all logs to find hook-related events
+      const parsedEvents = receipt.logs
+        .map(log => {
+          try {
+            return spendSaveHook.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .filter(event => event !== null);
+      
+      console.log('🔍 Hook events found:', parsedEvents.map(e => e?.name));
+      
+      // Check for specific hook execution events
+      const afterSwapEvent = parsedEvents.find(e => e?.name === 'AfterSwapExecuted');
+      if (afterSwapEvent) {
+        result.afterSwapExecuted = true;
+        console.log('✅ AfterSwap hook executed for user:', afterSwapEvent.args.user);
+      }
+      
+      // Check for savings processing
+      const savingsEvents = parsedEvents.filter(e => 
+        e?.name === 'OutputSavingsProcessed' || 
+        e?.name === 'InputTokenSaved' ||
+        e?.name === 'SavingsProcessedSuccessfully'
+      );
+      
+      if (savingsEvents.length > 0) {
+        result.savingsProcessed = true;
+        savingsEvents.forEach(event => {
+          console.log('💰 Savings event:', event?.name, {
+            user: event?.args.user,
+            token: event?.args.token,
+            amount: event?.args.amount?.toString()
+          });
+        });
+      }
+      
+      // Check for hook errors
+      const errorEvents = parsedEvents.filter(e => 
+        e?.name === 'AfterSwapError' || 
+        e?.name === 'BeforeSwapError'
+      );
+      
+      errorEvents.forEach(event => {
+        const errorMsg = `Hook error (${event?.name}): ${event?.args.reason}`;
+        result.errors.push(errorMsg);
+        console.error('❌', errorMsg);
+      });
+      
+      // BeforeSwap verification (implicit - if afterSwap executed, beforeSwap must have too)
+      if (result.afterSwapExecuted) {
+        result.beforeSwapExecuted = true;
+      }
+      
+      // Final validation
+      if (!result.afterSwapExecuted) {
+        result.errors.push('AfterSwap hook did not execute - savings may not have been processed');
+      }
+      
+      if (!result.savingsProcessed && result.afterSwapExecuted) {
+        result.errors.push('Hook executed but no savings events detected');
+      }
+      
+    } catch (error) {
+      const errorMsg = `Hook verification failed: ${error instanceof Error ? error.message : String(error)}`;
+      result.errors.push(errorMsg);
+      console.error('❌', errorMsg);
+    }
+    
+    return result;
   }
 
   /**

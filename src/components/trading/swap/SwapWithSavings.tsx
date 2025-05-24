@@ -157,7 +157,7 @@ const StrategySetupModal = ({
   );
 };
 
-// ========== PHASE 2: Strategy Status Banner Component ==========
+// ========== PHASE 2: Enhanced Strategy Status Banner Component ==========
 const StrategyStatusBanner = ({ 
   validation, 
   isValidating, 
@@ -169,21 +169,32 @@ const StrategyStatusBanner = ({
   onSetupStrategy: () => void;
   disableSavings: boolean;
 }) => {
-  if (disableSavings || validation.isValid) return null;
+  if (disableSavings) return null;
 
-  const hasErrors = validation.errors.length > 0;
-  const hasWarnings = validation.warnings.length > 0;
+  // PHASE 2: Enhanced validation display logic
+  const hasBlockingErrors = validation.blockingErrors?.length > 0;
+  const hasErrors = validation.errors?.length > 0;
+  const hasWarnings = validation.warnings?.length > 0;
+  const needsSetup = validation.needsSetup;
+  const validationLevel = validation.validationLevel;
+
+  // Don't show banner if validation passed completely
+  if (validation.isValid && !hasWarnings && validationLevel === 'comprehensive') return null;
 
   return (
     <div className={cn(
       "mb-4 p-3 rounded-lg border",
-      hasErrors ? "bg-red-900/20 border-red-800/40" : "bg-yellow-900/20 border-yellow-800/40"
+      hasBlockingErrors || needsSetup ? "bg-red-900/20 border-red-800/40" : 
+      hasErrors ? "bg-orange-900/20 border-orange-800/40" : 
+      "bg-yellow-900/20 border-yellow-800/40"
     )}>
       <div className="flex items-start space-x-2">
         {isValidating ? (
           <FiClock className="text-blue-400 mt-0.5 animate-pulse" />
-        ) : hasErrors ? (
+        ) : hasBlockingErrors || needsSetup ? (
           <FiAlertTriangle className="text-red-400 mt-0.5" />
+        ) : hasErrors ? (
+          <FiAlertTriangle className="text-orange-400 mt-0.5" />
         ) : (
           <FiInfo className="text-yellow-400 mt-0.5" />
         )}
@@ -191,30 +202,72 @@ const StrategyStatusBanner = ({
         <div className="flex-1">
           <h4 className={cn(
             "text-sm font-medium mb-1",
-            hasErrors ? "text-red-400" : "text-yellow-400"
+            hasBlockingErrors || needsSetup ? "text-red-400" : 
+            hasErrors ? "text-orange-400" : 
+            "text-yellow-400"
           )}>
             {isValidating ? 'Validating Strategy...' : 
-             hasErrors ? 'Strategy Setup Required' : 
+             hasBlockingErrors ? 'Strategy Configuration Blocked' :
+             needsSetup ? 'Strategy Setup Required' : 
+             hasErrors ? 'Strategy Issues Detected' :
              'Strategy Warnings'}
           </h4>
           
+          {/* PHASE 2: Enhanced validation level indicator */}
+          {!isValidating && validationLevel && (
+            <div className="mb-2">
+              <span className={cn(
+                "text-xs px-2 py-0.5 rounded",
+                validationLevel === 'failed' ? "bg-red-800/40 text-red-200" :
+                validationLevel === 'comprehensive' ? "bg-green-800/40 text-green-200" :
+                validationLevel === 'basic' ? "bg-yellow-800/40 text-yellow-200" :
+                "bg-gray-800/40 text-gray-200"
+              )}>
+                Validation: {validationLevel}
+              </span>
+            </div>
+          )}
+          
           {!isValidating && (
             <div className="space-y-1">
-              {validation.errors.map((error: string, index: number) => (
-                <p key={index} className="text-sm text-red-300">{error}</p>
+              {/* PHASE 2: Show blocking errors first */}
+              {validation.blockingErrors?.map((error: string, index: number) => (
+                <p key={`blocking-${index}`} className="text-sm text-red-300 font-medium">
+                  🚫 {error.split(':')[1] || error}
+                </p>
               ))}
-              {validation.warnings.map((warning: string, index: number) => (
-                <p key={index} className="text-sm text-yellow-300">{warning}</p>
+              
+              {validation.errors?.map((error: string, index: number) => (
+                <p key={`error-${index}`} className={cn(
+                  "text-sm",
+                  hasBlockingErrors ? "text-orange-300" : "text-red-300"
+                )}>{error}</p>
+              ))}
+              
+              {validation.warnings?.map((warning: string, index: number) => (
+                <p key={`warning-${index}`} className="text-sm text-yellow-300">{warning}</p>
+              ))}
+
+              {/* PHASE 2: Show recommendations */}
+              {validation.recommendations?.map((rec: string, index: number) => (
+                <p key={`rec-${index}`} className="text-sm text-blue-300">
+                  💡 {rec}
+                </p>
               ))}
             </div>
           )}
           
-          {validation.needsSetup && !isValidating && (
+          {(validation.needsSetup || hasBlockingErrors) && !isValidating && (
             <button
               onClick={onSetupStrategy}
-              className="mt-2 text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+              className={cn(
+                "mt-2 text-sm px-3 py-1 rounded font-medium",
+                hasBlockingErrors 
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              )}
             >
-              Set Up Savings Strategy
+              {hasBlockingErrors ? 'Fix Strategy Issues' : 'Set Up Savings Strategy'}
             </button>
           )}
         </div>
@@ -743,7 +796,7 @@ export default function SwapWithSavings() {
           </div>
         </div>
         
-        {/* ========== PHASE 2: Strategy Status Banner ========== */}
+        {/* ========== PHASE 2: Enhanced Strategy Status Banner ========== */}
         <StrategyStatusBanner
           validation={strategyValidation}
           isValidating={isValidatingStrategy}
@@ -1037,7 +1090,7 @@ export default function SwapWithSavings() {
           </div>
         )}
         
-        {/* ========== PHASE 2 & 3: Enhanced Swap Button with Strategy + Approval Validation ========== */}
+        {/* ========== PHASE 2: Enhanced Swap Button with Strategy + Approval Validation ========== */}
         <button
           disabled={
             !fromToken || 
@@ -1047,11 +1100,11 @@ export default function SwapWithSavings() {
             isSwapping || 
             parseFloat(fromAmount) <= 0 || 
             validationError !== null ||
-            !canExecuteSwap || // Combined strategy + approval validation
+            !canExecuteSwap || // PHASE 2: Enhanced validation gate
             isValidatingStrategy || 
             isSettingUpStrategy || 
-            isCheckingApprovals || // PHASE 3: Don't allow while checking approvals
-            isApprovingTokens || // PHASE 3: Don't allow while approving
+            isCheckingApprovals ||
+            isApprovingTokens ||
             executionStatus === 'validating-strategy' || 
             executionStatus === 'setting-strategy'
           }
@@ -1081,9 +1134,9 @@ export default function SwapWithSavings() {
               ? "Validating Strategy..."
             : isSettingUpStrategy || executionStatus === 'setting-strategy'
               ? "Setting Up Strategy..."
-            : isCheckingApprovals // PHASE 3: Checking approvals state
+            : isCheckingApprovals
               ? "Checking Approvals..."
-            : isApprovingTokens // PHASE 3: Approving tokens state
+            : isApprovingTokens
               ? "Approving Tokens..."
             : !fromAmount || parseFloat(fromAmount) <= 0
               ? "Enter an amount"
@@ -1091,10 +1144,14 @@ export default function SwapWithSavings() {
               ? "Insufficient balance"
             : strategySetupRequired
               ? "Set Up Savings Strategy"
-            : needsApprovals && !canProceedWithApprovals // PHASE 3: Needs approvals
+            : strategyValidation.blockingErrors?.length > 0  // PHASE 2: Show specific blocking errors
+              ? "Fix Strategy Configuration"
+            : strategyValidation.needsSetup
+              ? "Configure Savings Strategy"
+            : needsApprovals && !canProceedWithApprovals
               ? "Approve Tokens"
-            : !canExecuteSwap && strategyValidation.errors.length > 0
-              ? "Fix Strategy Issues"
+            : !canExecuteSwap && strategyValidation.errors?.length > 0
+              ? "Resolve Strategy Issues"
             : "Swap"
           }
         </button>

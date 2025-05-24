@@ -20,7 +20,19 @@ interface StrategyValidationResult {
   errors: string[];
   warnings: string[];
   canProceedWithSwap: boolean;
+  validationLevel: 'none' | 'basic' | 'comprehensive' | 'failed';
+  blockingErrors: string[];
+  recommendations: string[];
 }
+
+// Add strategy validation error types
+type StrategyValidationError = 
+  | 'STRATEGY_NOT_CONFIGURED'
+  | 'PERCENTAGE_TOO_LOW' 
+  | 'PERCENTAGE_TOO_HIGH'
+  | 'SPECIFIC_TOKEN_MISSING'
+  | 'INVALID_CONFIGURATION'
+  | 'STRATEGY_VALIDATION_FAILED';
 
 interface StrategySetupParams {
   percentage: number;
@@ -106,8 +118,15 @@ export default function useSwapWithSavings(
     needsSetup: false,
     errors: [],
     warnings: [],
-    canProceedWithSwap: false
+    canProceedWithSwap: false,
+    validationLevel: 'none',
+    blockingErrors: [],
+    recommendations: []
   });
+
+  // PHASE 2: Add strategy validation state tracking
+  const [strategyValidationError, setStrategyValidationError] = useState<StrategyValidationError | null>(null);
+  const [lastValidationTimestamp, setLastValidationTimestamp] = useState<number>(0);
 
   // ========== DERIVED VALUES ==========
   const fromToken = props?.fromToken || 'ETH';
@@ -175,9 +194,32 @@ export default function useSwapWithSavings(
   }, [amount, savingsPreview.rawAmount, strategy.savingsTokenType, strategy.isConfigured, disableSavings, props]);
 
   // ========== COMPUTED PROPERTIES ==========
+  // PHASE 2: Enhanced execution gate with strict validation
   const canExecuteSwap = useMemo(() => {
-    return strategyValidation.canProceedWithSwap && 
+    console.log('🔒 PHASE 2: Checking execution gates...', {
+      strategyValid: strategyValidation.canProceedWithSwap,
+      strategyLevel: strategyValidation.validationLevel,
+      blockingErrors: strategyValidation.blockingErrors.length,
+      approvals: canProceedWithApprovals,
+      validating: isValidatingStrategy,
+      setting: isSettingUpStrategy,
+      checking: isCheckingApprovals,
+      approving: isApprovingTokens,
+      status: executionStatus
+    });
+
+    // PHASE 2: Strict blocking conditions
+    const hasBlockingErrors = strategyValidation.blockingErrors.length > 0;
+    const hasStrategyErrors = strategyValidation.errors.length > 0 && !disableSavings;
+    const isValidationFailed = strategyValidation.validationLevel === 'failed';
+    const needsSetup = strategyValidation.needsSetup && !disableSavings;
+    
+    // Block if any critical conditions are not met
+    const canProceed = strategyValidation.canProceedWithSwap && 
            canProceedWithApprovals &&
+           !hasBlockingErrors &&
+           !isValidationFailed &&
+           !needsSetup &&
            !isValidatingStrategy && 
            !isSettingUpStrategy &&
            !isCheckingApprovals &&
@@ -186,9 +228,23 @@ export default function useSwapWithSavings(
            executionStatus !== 'setting-strategy' &&
            executionStatus !== 'checking-approvals' &&
            executionStatus !== 'approving-tokens';
+
+    if (!canProceed) {
+      console.log('🚫 PHASE 2: Execution blocked:', {
+        reason: hasBlockingErrors ? 'Blocking errors' :
+                isValidationFailed ? 'Validation failed' :
+                needsSetup ? 'Strategy setup required' :
+                'Other validation issues'
+      });
+    } else {
+      console.log('✅ PHASE 2: Execution gates passed');
+    }
+
+    return canProceed;
   }, [
     strategyValidation, 
     canProceedWithApprovals,
+    disableSavings,
     isValidatingStrategy, 
     isSettingUpStrategy,
     isCheckingApprovals,
@@ -245,67 +301,144 @@ export default function useSwapWithSavings(
     );
   }, [signer]);
 
+  // PHASE 2: Enhanced comprehensive strategy validation
   const validateStrategy = useCallback(async (): Promise<StrategyValidationResult> => {
+    console.log('🔍 PHASE 2: Starting comprehensive strategy validation...');
+    
     if (!address || disableSavings) {
+      console.log('✅ PHASE 2: Savings disabled or no address - validation passed');
       return {
         isValid: true,
         needsSetup: false,
         errors: [],
         warnings: [],
-        canProceedWithSwap: true
+        canProceedWithSwap: true,
+        validationLevel: 'none',
+        blockingErrors: [],
+        recommendations: []
       };
     }
 
     setIsValidatingStrategy(true);
+    setStrategyValidationError(null);
+    
     const result: StrategyValidationResult = {
       isValid: false,
       needsSetup: false,
       errors: [],
       warnings: [],
-      canProceedWithSwap: false
+      canProceedWithSwap: false,
+      validationLevel: 'basic',
+      blockingErrors: [],
+      recommendations: []
     };
 
     try {
+      console.log('📋 PHASE 2: Fetching user strategy configuration...');
       const strategyContract = await getSavingStrategyContract();
       const userStrategy = await strategyContract.getUserSavingStrategy(address);
       
+      // PHASE 2: Comprehensive strategy validation checks
+      
+      // 1. Check if strategy is configured at all
       if (!userStrategy.percentage || userStrategy.percentage.eq(0)) {
         result.needsSetup = true;
-        result.errors.push('No savings percentage configured. Please set up your savings strategy.');
+        result.blockingErrors.push('STRATEGY_NOT_CONFIGURED: No savings percentage configured');
+        result.errors.push('Savings strategy not configured. Please set up your savings strategy before swapping.');
+        result.recommendations.push('Click "Set Up Strategy" to configure your savings percentage');
+        setStrategyValidationError('STRATEGY_NOT_CONFIGURED');
+        console.log('❌ PHASE 2: Strategy not configured');
       } else {
-        const percentage = userStrategy.percentage.toNumber() / 100;
+        console.log('✅ PHASE 2: Strategy found, validating configuration...');
+        const percentage = userStrategy.percentage.toNumber() / 100; // Convert from basis points
         
+        // 2. Validate percentage ranges
         if (percentage < 1) {
-          result.warnings.push('Very low savings percentage. Consider increasing for better savings.');
-        }
-        if (percentage > 50) {
-          result.errors.push('Savings percentage too high (>50%). Please reduce for safety.');
-        }
-        if (userStrategy.savingsTokenType === 2) {
-          if (!userStrategy.specificSavingsToken || userStrategy.specificSavingsToken === ethers.constants.AddressZero) {
-            result.errors.push('Specific savings token not configured. Please set a target token.');
+          result.warnings.push(`Low savings percentage (${percentage}%). Consider 5-10% for meaningful savings.`);
+          result.recommendations.push('Increase savings percentage to 5-10% for better results');
+          if (percentage < 0.1) {
+            result.blockingErrors.push('PERCENTAGE_TOO_LOW: Savings percentage below minimum threshold');
+            result.errors.push('Savings percentage too low (<0.1%). Please increase to at least 1%.');
+            setStrategyValidationError('PERCENTAGE_TOO_LOW');
           }
         }
         
-        if (result.errors.length === 0) {
+        if (percentage > 50) {
+          result.blockingErrors.push('PERCENTAGE_TOO_HIGH: Savings percentage exceeds safety limit');
+          result.errors.push('Savings percentage too high (>50%). Please reduce for safety.');
+          setStrategyValidationError('PERCENTAGE_TOO_HIGH');
+          console.log('❌ PHASE 2: Percentage too high:', percentage + '%');
+        }
+        
+        // 3. Validate specific token configuration
+        if (userStrategy.savingsTokenType === 2) { // SPECIFIC token type
+          if (!userStrategy.specificSavingsToken || userStrategy.specificSavingsToken === ethers.constants.AddressZero) {
+            result.blockingErrors.push('SPECIFIC_TOKEN_MISSING: Specific savings token not configured');
+            result.errors.push('Specific savings token not configured. Please set a target token.');
+            result.recommendations.push('Configure a specific token for your savings strategy');
+            setStrategyValidationError('SPECIFIC_TOKEN_MISSING');
+            console.log('❌ PHASE 2: Specific token missing');
+          }
+        }
+        
+        // 4. Validate swap amount vs savings configuration
+        if (amount && parseFloat(amount) > 0) {
+          const swapAmount = parseFloat(amount);
+          const savingsAmount = (swapAmount * percentage) / 100;
+          
+          if (savingsAmount < 0.001 && fromToken === 'ETH') {
+            result.warnings.push(`Very small savings amount (${savingsAmount.toFixed(6)} ETH). Consider larger swap or higher percentage.`);
+            result.recommendations.push('Increase swap amount or savings percentage for meaningful savings');
+          }
+          
+          if (savingsAmount > swapAmount * 0.5) {
+            result.blockingErrors.push('INVALID_CONFIGURATION: Savings amount exceeds reasonable limit');
+            result.errors.push('Savings configuration would save more than 50% of swap. Please adjust.');
+            setStrategyValidationError('INVALID_CONFIGURATION');
+          }
+        }
+        
+        // 5. Check for strategy conflicts
+        if (userStrategy.enableDCA && userStrategy.savingsTokenType === 0) {
+          result.warnings.push('DCA enabled with input token savings. Output or specific token recommended for DCA.');
+          result.recommendations.push('Consider changing to output token savings for better DCA performance');
+        }
+        
+        // 6. Final validation
+        if (result.blockingErrors.length === 0) {
           result.isValid = true;
           result.canProceedWithSwap = true;
+          result.validationLevel = 'comprehensive';
+          console.log('✅ PHASE 2: Strategy validation passed:', {
+            percentage: percentage + '%',
+            type: userStrategy.savingsTokenType,
+            dca: userStrategy.enableDCA
+          });
+        } else {
+          result.validationLevel = 'failed';
+          console.log('❌ PHASE 2: Strategy validation failed:', result.blockingErrors);
         }
       }
 
-      if (result.isValid && !disableSavings) {
-        const swapAmount = parseFloat(amount);
-        const percentage = userStrategy.percentage ? userStrategy.percentage.toNumber() / 100 : 0;
-        const savingsAmount = (swapAmount * percentage) / 100;
-        if (savingsAmount < 0.001 && fromToken === 'ETH') {
-          result.warnings.push('Savings amount very small. Consider larger swap or higher percentage.');
-        }
-      }
     } catch (error) {
-      result.errors.push('Failed to validate strategy. Please try again.');
+      console.error('❌ PHASE 2: Strategy validation error:', error);
+      result.blockingErrors.push('STRATEGY_VALIDATION_FAILED: Network or contract error');
+      result.errors.push('Failed to validate strategy. Please check your connection and try again.');
+      result.validationLevel = 'failed';
+      setStrategyValidationError('STRATEGY_VALIDATION_FAILED');
     }
 
     setIsValidatingStrategy(false);
+    setLastValidationTimestamp(Date.now());
+    
+    console.log('📊 PHASE 2: Validation result:', {
+      isValid: result.isValid,
+      canProceed: result.canProceedWithSwap,
+      errors: result.errors.length,
+      warnings: result.warnings.length,
+      level: result.validationLevel
+    });
+    
     return result;
   }, [address, disableSavings, amount, fromToken, getSavingStrategyContract]);
 
@@ -362,19 +495,43 @@ export default function useSwapWithSavings(
     }
   }, [props, fromToken, toToken]);
 
+  // PHASE 2: Enhanced strategy validation effect with caching
   useEffect(() => {
     if (props && address && !disableSavings) {
-      validateStrategy().then(setStrategyValidation);
+      // PHASE 2: Add validation caching to prevent excessive calls
+      const now = Date.now();
+      const cacheTimeout = 30000; // 30 seconds cache
+      
+      if (now - lastValidationTimestamp > cacheTimeout) {
+        console.log('🔄 PHASE 2: Triggering strategy validation...');
+        validateStrategy().then(setStrategyValidation);
+      }
     } else if (disableSavings) {
+      console.log('✅ PHASE 2: Savings disabled - setting default validation');
       setStrategyValidation({
         isValid: true,
         needsSetup: false,
         errors: [],
         warnings: [],
-        canProceedWithSwap: true
+        canProceedWithSwap: true,
+        validationLevel: 'none',
+        blockingErrors: [],
+        recommendations: []
       });
     }
-  }, [address, disableSavings, validateStrategy, props]);
+  }, [address, disableSavings, validateStrategy, props, lastValidationTimestamp]);
+
+  // PHASE 2: Add validation refresh when amount changes significantly
+  useEffect(() => {
+    if (props && address && !disableSavings && amount && parseFloat(amount) > 0) {
+      const currentAmount = parseFloat(amount);
+      // Re-validate if amount changes by more than 10%
+      if (Math.abs(currentAmount - parseFloat(actualSwapAmount || '0')) > currentAmount * 0.1) {
+        console.log('🔄 PHASE 2: Amount changed significantly, re-validating strategy...');
+        validateStrategy().then(setStrategyValidation);
+      }
+    }
+  }, [amount, actualSwapAmount, address, disableSavings, validateStrategy, props]);
 
   // ========== GAS ESTIMATION EFFECT ==========
   useEffect(() => {
@@ -409,33 +566,86 @@ export default function useSwapWithSavings(
     disableSavings
   ]);
 
-  // ========== MAIN SWAP EXECUTION ==========
+  // ========== PHASE 2: ENHANCED SWAP EXECUTION WITH BLOCKING VALIDATION ==========
   const executeSwapFunction = async () => {
+    console.log('🚀 PHASE 2: Starting swap execution with enhanced validation...');
+    
     if (!props || !address || !amount || parseFloat(amount) <= 0) {
       throw new Error('Invalid swap parameters');
     }
 
-    // Strategy validation
+    // PHASE 2: Pre-execution validation gate
+    console.log('🔒 PHASE 2: Checking pre-execution gates...');
+    if (!canExecuteSwap) {
+      if (strategyValidation.blockingErrors.length > 0) {
+        const primaryError = strategyValidation.blockingErrors[0];
+        const errorType = primaryError.split(':')[0];
+        
+        switch (errorType) {
+          case 'STRATEGY_NOT_CONFIGURED':
+            throw new Error('Strategy Setup Required: Please configure your savings strategy before swapping. Use the strategy setup modal to get started.');
+          case 'PERCENTAGE_TOO_LOW':
+            throw new Error('Invalid Strategy: Savings percentage too low. Please increase to at least 1%.');
+          case 'PERCENTAGE_TOO_HIGH':
+            throw new Error('Invalid Strategy: Savings percentage too high (>50%). Please reduce for safety.');
+          case 'SPECIFIC_TOKEN_MISSING':
+            throw new Error('Incomplete Strategy: Specific savings token not configured. Please set a target token.');
+          case 'INVALID_CONFIGURATION':
+            throw new Error('Strategy Configuration Error: Please review and update your savings settings.');
+          default:
+            throw new Error('Strategy Validation Failed: Please check your savings configuration.');
+        }
+      }
+      
+      if (strategyValidation.needsSetup && !disableSavings) {
+        throw new Error('Strategy Setup Required: Please set up your savings strategy to continue.');
+      }
+      
+      throw new Error('Cannot execute swap: Validation requirements not met.');
+    }
+
+    // PHASE 2: Comprehensive strategy validation
     setExecutionStatus('validating-strategy');
+    console.log('🔍 PHASE 2: Performing final strategy validation...');
     const currentValidation = await validateStrategy();
     setStrategyValidation(currentValidation);
     
+    // PHASE 2: Strict validation enforcement
     if (!currentValidation.canProceedWithSwap) {
-      const errorMsg = currentValidation.errors.length > 0 
-        ? currentValidation.errors.join(' ') 
-        : 'Strategy validation failed';
-      throw new Error(`Strategy Error: ${errorMsg}`);
+      const errorMsg = currentValidation.blockingErrors.length > 0 
+        ? currentValidation.blockingErrors.join(', ') 
+        : currentValidation.errors.join(', ') || 'Strategy validation failed';
+      
+      console.error('❌ PHASE 2: Strategy validation failed:', errorMsg);
+      setExecutionStatus('error');
+      throw new Error(`PHASE 2 Strategy Error: ${errorMsg}`);
+    }
+    
+    // PHASE 2: Enhanced blocking for specific conditions
+    if (!disableSavings) {
+      if (currentValidation.validationLevel === 'failed') {
+        setExecutionStatus('error');
+        throw new Error('PHASE 2 Strategy Error: Strategy validation failed. Please review your configuration.');
+      }
+      
+      if (currentValidation.blockingErrors.length > 0) {
+        setExecutionStatus('error');
+        throw new Error(`PHASE 2 Strategy Error: ${currentValidation.blockingErrors.join(', ')}`);
+      }
     }
     
     if (currentValidation.warnings.length > 0) {
-      console.warn('Strategy Warnings:', currentValidation.warnings);
+      console.warn('⚠️ PHASE 2: Strategy warnings (non-blocking):', currentValidation.warnings);
     }
 
-    // Approval validation
+    // PHASE 2: Approval validation
     if (needsApprovals && !canProceedWithApprovals) {
-      throw new Error(`Approval Error: Token approvals required for swapping and savings functionality`);
+      console.error('❌ PHASE 2: Approval validation failed');
+      setExecutionStatus('error');
+      throw new Error(`PHASE 2 Approval Error: Token approvals required for swapping and savings functionality`);
     }
 
+    console.log('✅ PHASE 2: All validation gates passed, proceeding with swap...');
     setExecutionStatus('preparing');
     setError(null);
     

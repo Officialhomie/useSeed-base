@@ -7,7 +7,6 @@ import './page-styles.css';
 import './smart-wallet.css';
 import Link from 'next/link';
 import NavigationBar from '@/components/core/NavigationBar';
-import Subscribe from '@/components/ui/Subscribe';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
