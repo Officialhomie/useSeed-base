@@ -27,6 +27,8 @@ import SavingStrategyAbi from '@/abi/savings/SavingStrategy.json'
 import SpendSaveHookAbi from '@/abi/core/SpendSaveHook.json'
 import { BaseScanClient } from '../basescan/BaseScanClient'
 import SpendSaveHookABI from '@/abi/core/SpendSaveHook.json'
+import DCAABI from '@/abi/trading/DCA.json';
+
 
 // Add interface for enhanced transaction result
 interface SwapExecutionResult extends ethers.providers.TransactionResponse {
@@ -491,15 +493,60 @@ export class UniswapV4Client {
         console.log('🎧 PHASE 3: Starting real-time event monitoring...');
         status = 'listening';
   
-        // Event handlers
+        // Listen for savings processing events
         const onOutputSavingsProcessed = (user: string, token: string, amount: ethers.BigNumber, event: any) => {
           console.log('💰 PHASE 3: OutputSavingsProcessed event received:', {
-            user, token, amount: amount.toString(), blockNumber: event.blockNumber
+            user,
+            token,
+            amount: amount.toString(),
+            blockNumber: event.blockNumber,
+            transactionHash: event.transactionHash
           });
+          
           eventsReceived.push('OutputSavingsProcessed');
           this.triggerEventCallback('OutputSavingsProcessed', {
-            user, token, amount: amount.toString(),
-            formattedAmount: ethers.utils.formatEther(amount), event
+            user,
+            token,
+            amount: amount.toString(),
+            formattedAmount: ethers.utils.formatEther(amount),
+            event
+          });
+        };
+
+        // PHASE 4: Listen for DCA-related events
+        const onDCASwapExecuted = (user: string, fromToken: string, toToken: string, amountIn: ethers.BigNumber, amountOut: ethers.BigNumber, event: any) => {
+          console.log('🔄 PHASE 4: DCASwapExecuted event received:', {
+            user,
+            fromToken,
+            toToken,
+            amountIn: amountIn.toString(),
+            amountOut: amountOut.toString(),
+            blockNumber: event.blockNumber
+          });
+          
+          eventsReceived.push('DCASwapExecuted');
+          this.triggerEventCallback('DCASwapExecuted', {
+            user,
+            fromToken,
+            toToken,
+            amountIn: amountIn.toString(),
+            amountOut: amountOut.toString(),
+            event
+          });
+        };
+
+        const onDCAQueueProcessed = (user: string, itemsProcessed: ethers.BigNumber, event: any) => {
+          console.log('🔄 PHASE 4: DCAQueueProcessed event received:', {
+            user,
+            itemsProcessed: itemsProcessed.toNumber(),
+            blockNumber: event.blockNumber
+          });
+          
+          eventsReceived.push('DCAQueueProcessed');
+          this.triggerEventCallback('DCAQueueProcessed', {
+            user,
+            itemsProcessed: itemsProcessed.toNumber(),
+            event
           });
         };
   
@@ -553,9 +600,28 @@ export class UniswapV4Client {
         spendSaveHook.on(spendSaveHook.filters.AfterSwapError(userFilter), onAfterSwapError);
         spendSaveHook.on(spendSaveHook.filters.BeforeSwapError(userFilter), onBeforeSwapError);
         spendSaveHook.on(spendSaveHook.filters.AfterSwapExecuted(userFilter), onAfterSwapExecuted);
-  
+
         savingStrategy.on(savingStrategy.filters.InputTokenSaved(userFilter), onInputTokenSaved);
         savingStrategy.on(savingStrategy.filters.SavingsProcessedSuccessfully(userFilter), onSavingsProcessedSuccessfully);
+
+        // PHASE 4: Set up DCA event listeners
+        try {
+          // Import DCA contract for event listening
+          const dcaContract = new ethers.Contract(
+            CONTRACT_ADDRESSES.DCA,
+            DCAABI,
+            this.provider
+          );
+
+          dcaContract.on(dcaContract.filters.DCASwapExecuted?.(userFilter), onDCASwapExecuted);
+          dcaContract.on(dcaContract.filters.DCAQueueProcessed?.(userFilter), onDCAQueueProcessed);
+
+          // Add DCA cleanup
+          eventListeners.push(() => dcaContract.removeAllListeners());
+          console.log('🔄 PHASE 4: DCA event listeners configured');
+        } catch (error) {
+          console.warn('⚠️ PHASE 4: Could not set up DCA event listeners:', error);
+        }
   
         // Store cleanup functions
         eventListeners.push(

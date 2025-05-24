@@ -374,13 +374,21 @@ export default function SwapWithSavings() {
     approveAllTokens,
     refreshApprovals,
     canProceedWithApprovals,
-
+    // ========== PHASE 3: Real-time event properties ==========
     realTimeEvents,
     eventListenerStatus,
     onSavingsProcessed,
     onDCAQueued,
     onSwapError,
-    cleanupEventListeners
+    cleanupEventListeners,
+    // ========== PHASE 4: DCA integration properties ==========
+    dcaQueueStatus,
+    dcaQueueLength,
+    dcaProcessingResults,
+    isDcaProcessing,
+    processDCAQueue,
+    getDCAQueueInfo,
+    clearDCAResults
   } = useSwapWithSavings(swapParams);
   
   // REMOVED: The useEffect that was trying to use estimatedOutput since we don't have quotes anymore
@@ -720,32 +728,84 @@ export default function SwapWithSavings() {
     });
   };
   
-  // Event handlers
+  // PHASE 3: Enhanced real-time event handlers
   const handleSavingsProcessed = useCallback((data: any) => {
     console.log('💰 PHASE 3: UI handling savings processed event:', data);
+    
     const tokenInfo = tokens.find(t => t.address === data.token);
     const tokenSymbol = tokenInfo?.symbol || 'Unknown';
+    
     addNotification({
       type: 'success',
       title: 'Savings Processed',
       message: `Saved ${data.formattedAmount || data.amount} ${tokenSymbol}`,
     });
-  }, [tokens, addNotification]);
 
-  
-  
+    // PHASE 4: Trigger DCA info refresh after savings processed
+    if (strategy.enableDCA && dcaEnabled) {
+      console.log('🔄 PHASE 4: Savings processed, refreshing DCA queue info...');
+      getDCAQueueInfo().catch(error => {
+        console.warn('Failed to refresh DCA queue info:', error);
+      });
+    }
+  }, [tokens, addNotification, strategy.enableDCA, dcaEnabled, getDCAQueueInfo]);
+
   const handleDCAQueued = useCallback((data: any) => {
     console.log('🔄 PHASE 3: UI handling DCA queued event:', data);
+    
     const fromTokenInfo = tokens.find(t => t.address === data.fromToken);
     const toTokenInfo = tokens.find(t => t.address === data.toToken);
+    
     if (fromTokenInfo && toTokenInfo) {
       addNotification({
         type: 'success',
         title: 'DCA Queued',
         message: `Queued ${data.amount} ${fromTokenInfo.symbol} for conversion to ${toTokenInfo.symbol}`,
       });
+
+      // PHASE 4: Refresh DCA queue info when new items are queued
+      console.log('🔄 PHASE 4: DCA item queued, refreshing queue info...');
+      getDCAQueueInfo().catch(error => {
+        console.warn('Failed to refresh DCA queue info after queuing:', error);
+      });
     }
-  }, [tokens, addNotification]);
+  }, [tokens, addNotification, getDCAQueueInfo]);
+
+  // PHASE 4: DCA-specific event handlers
+  const handleDCAProcessingStart = useCallback(() => {
+    addNotification({
+      type: 'pending',
+      title: 'DCA Processing Started',
+      message: 'Processing queued DCA swaps...',
+    });
+  }, [addNotification]);
+
+  const handleDCAProcessingComplete = useCallback((results: any[]) => {
+    const successCount = results.filter(r => r.status === 'success').length;
+    const failureCount = results.filter(r => r.status === 'failed').length;
+    
+    if (failureCount === 0) {
+      addNotification({
+        type: 'success',
+        title: 'DCA Processing Complete',
+        message: `Successfully processed ${successCount} DCA swap${successCount !== 1 ? 's' : ''}`,      });
+    } else {
+      addNotification({
+        type: 'warning',
+        title: 'DCA Processing Completed with Issues',
+        message: `${successCount} successful, ${failureCount} failed. Check details below.`,
+      });
+    }
+  }, [addNotification]);
+
+  // PHASE 4: Monitor DCA processing status changes
+  useEffect(() => {
+    if (dcaQueueStatus === 'processing' && isDcaProcessing) {
+      handleDCAProcessingStart();
+    } else if (dcaQueueStatus === 'completed' && dcaProcessingResults.length > 0) {
+      handleDCAProcessingComplete(dcaProcessingResults);
+    }
+  }, [dcaQueueStatus, isDcaProcessing, dcaProcessingResults, handleDCAProcessingStart, handleDCAProcessingComplete]);
 
   const handleSwapError = useCallback((data: any) => {
     console.error('❌ PHASE 3: UI handling swap error event:', data);
@@ -855,6 +915,7 @@ export default function SwapWithSavings() {
           approvalStatus={approvalStatus}
           approvalState={approvalState}
         />
+        
         {/* Settings panel */}
         {showSettings && (
           <div className="mb-4 bg-gray-800/40 rounded-xl p-3 sm:p-4">
@@ -1113,6 +1174,104 @@ export default function SwapWithSavings() {
           </div>
         )}
 
+        {/* PHASE 4: DCA Queue Status Display */}
+        {(strategy.enableDCA || dcaQueueLength > 0 || dcaQueueStatus !== 'idle') && (
+          <div className="mt-4 p-3 rounded-lg text-sm bg-purple-900/20 border border-purple-800/40">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium text-purple-400">DCA Queue Status</div>
+              <div className="flex items-center space-x-2">
+                {dcaQueueLength > 0 && (
+                  <span className="text-xs bg-purple-800/40 text-purple-200 px-2 py-0.5 rounded">
+                    {dcaQueueLength} item{dcaQueueLength !== 1 ? 's' : ''}
+                  </span>
+                )}
+                <span className={cn(
+                  "text-xs px-2 py-0.5 rounded",
+                  dcaQueueStatus === 'idle' ? "bg-gray-800/40 text-gray-300" :
+                  dcaQueueStatus === 'checking' ? "bg-blue-800/40 text-blue-200" :
+                  dcaQueueStatus === 'processing' ? "bg-yellow-800/40 text-yellow-200" :
+                  dcaQueueStatus === 'completed' ? "bg-green-800/40 text-green-200" :
+                  "bg-red-800/40 text-red-200"
+                )}>
+                  {dcaQueueStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* DCA Processing Progress */}
+            {isDcaProcessing && (
+              <div className="mb-2">
+                <div className="flex items-center text-xs text-purple-300">
+                  <div className="animate-spin w-3 h-3 border border-purple-400 border-t-transparent rounded-full mr-2"></div>
+                  Processing DCA swaps...
+                </div>
+              </div>
+            )}
+
+            {/* DCA Processing Results */}
+            {dcaProcessingResults.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs text-purple-300 mb-1">Processing Results:</div>
+                {dcaProcessingResults.map((result, index) => (
+                  <div key={index} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center">
+                      <span className={cn(
+                        "w-2 h-2 rounded-full mr-2",
+                        result.status === 'pending' ? "bg-yellow-400 animate-pulse" :
+                        result.status === 'success' ? "bg-green-400" :
+                        "bg-red-400"
+                      )}></span>
+                      <span className="text-purple-300">
+                        Swap #{result.index}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {result.txHash && (
+                        <a
+                          href={`https://basescan.org/tx/${result.txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          <FiExternalLink size={10} />
+                        </a>
+                      )}
+                      <span className={cn(
+                        "text-xs",
+                        result.status === 'success' ? "text-green-300" :
+                        result.status === 'failed' ? "text-red-300" :
+                        "text-yellow-300"
+                      )}>
+                        {result.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Manual DCA Processing Button */}
+            {dcaQueueLength > 0 && dcaQueueStatus === 'idle' && !isDcaProcessing && (
+              <button
+                onClick={() => processDCAQueue().catch(console.error)}
+                className="mt-2 text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded"
+              >
+                Process DCA Queue
+              </button>
+            )}
+
+            {/* Clear Results Button */}
+            {dcaProcessingResults.length > 0 && dcaQueueStatus !== 'processing' && (
+              <button
+                onClick={clearDCAResults}
+                className="mt-2 ml-2 text-xs bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded"
+              >
+                Clear Results
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Show any transaction errors */}
         {error && (
           <div className={cn(
@@ -1154,6 +1313,15 @@ export default function SwapWithSavings() {
                 <span className="text-gray-400">Actual swap amount: </span>
                 <span className="text-white">{actualSwapAmount} {fromToken?.symbol}</span>
               </p>
+              {/* PHASE 4: DCA preview information */}
+              {strategy.enableDCA && dcaEnabled && dcaTargetToken && (
+                <p>
+                  <span className="text-gray-400">DCA target: </span>
+                  <span className="text-purple-300">
+                    {tokens.find(t => t.address === dcaTargetToken)?.symbol || 'Unknown'}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
         )}

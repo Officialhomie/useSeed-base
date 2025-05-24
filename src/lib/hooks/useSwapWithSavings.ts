@@ -98,12 +98,30 @@ interface SwapWithSavingsResult {
   refreshApprovals: () => Promise<void>;
   canProceedWithApprovals: boolean;
 
+  // PHASE 3: Real-time event features
   realTimeEvents: RealTimeEventData[];
   eventListenerStatus: 'inactive' | 'listening' | 'completed' | 'error';
   onSavingsProcessed?: (callback: (data: any) => void) => void;
   onDCAQueued?: (callback: (data: any) => void) => void;
   onSwapError?: (callback: (data: any) => void) => void;
   cleanupEventListeners?: () => void;
+  
+  // PHASE 4: DCA integration features
+  dcaQueueStatus: 'idle' | 'checking' | 'processing' | 'completed' | 'error';
+  dcaQueueLength: number;
+  dcaProcessingResults: Array<{
+    index: number;
+    status: 'pending' | 'success' | 'failed';
+    txHash?: string;
+    error?: string;
+    fromToken: string;
+    toToken: string;
+    amount: string;
+  }>;
+  isDcaProcessing: boolean;
+  processDCAQueue: () => Promise<void>;
+  getDCAQueueInfo: () => Promise<{length: number; items: any[]}>;
+  clearDCAResults: () => void;
 }
 
 /**
@@ -142,9 +160,24 @@ export default function useSwapWithSavings(
   const [strategyValidationError, setStrategyValidationError] = useState<StrategyValidationError | null>(null);
   const [lastValidationTimestamp, setLastValidationTimestamp] = useState<number>(0);
 
+  // PHASE 3: Real-time event state management
   const [realTimeEvents, setRealTimeEvents] = useState<RealTimeEventData[]>([]);
   const [eventListenerStatus, setEventListenerStatus] = useState<'inactive' | 'listening' | 'completed' | 'error'>('inactive');
   const [eventCleanupFunction, setEventCleanupFunction] = useState<(() => void) | null>(null);
+
+  // PHASE 4: DCA state management
+  const [dcaQueueStatus, setDcaQueueStatus] = useState<'idle' | 'checking' | 'processing' | 'completed' | 'error'>('idle');
+  const [dcaQueueLength, setDcaQueueLength] = useState<number>(0);
+  const [dcaProcessingResults, setDcaProcessingResults] = useState<Array<{
+    index: number;
+    status: 'pending' | 'success' | 'failed';
+    txHash?: string;
+    error?: string;
+    fromToken: string;
+    toToken: string;
+    amount: string;
+  }>>([]);
+  const [isDcaProcessing, setIsDcaProcessing] = useState(false);
 
   // ========== DERIVED VALUES ==========
   const fromToken = props?.fromToken || 'ETH';
@@ -186,6 +219,30 @@ export default function useSwapWithSavings(
     amount: amount,
     enabled: !disableSavings && !!props
   });
+
+  // ========== PHASE 4: DCA MANAGEMENT ==========
+  const getDCAContract = useCallback(async () => {
+    if (!signer) throw new Error('Signer not available for DCA operations');
+    
+    // Import DCA ABI (assuming it exists)
+    const DCAModuleABI = await import('@/abi/trading/DCA.json');
+    return new ethers.Contract(
+      CONTRACT_ADDRESSES.DCA,
+      DCAModuleABI.default,
+      signer
+    );
+  }, [signer]);
+
+  const getSpendSaveStorageContract = useCallback(async () => {
+    if (!signer) throw new Error('Signer not available for storage operations');
+    
+    const SpendSaveStorageABI = await import('@/abi/core/SpendSaveStorage.json');
+    return new ethers.Contract(
+      CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
+      SpendSaveStorageABI.default,
+      signer
+    );
+  }, [signer]);
 
   // ========== SAVINGS PREVIEW ==========
   const savingsPreview = useSavingsPreview(
@@ -281,16 +338,6 @@ export default function useSwapWithSavings(
     setRealTimeEvents([]);
   }, [eventCleanupFunction]);
 
-  // PHASE 3: Auto-cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (eventCleanupFunction) {
-        console.log('🧹 PHASE 3: Auto-cleanup on unmount');
-        eventCleanupFunction();
-      }
-    };
-  }, [eventCleanupFunction]);
-
   // ========== TRANSACTION RECEIPT MONITORING ==========
   const { isLoading, isSuccess } = useWaitForTransactionReceipt({
     hash: transactionHash || undefined,
@@ -305,6 +352,179 @@ export default function useSwapWithSavings(
     }
     return amount;
   }, [amount, savingsPreview.rawAmount, strategy.savingsTokenType, strategy.isConfigured, disableSavings, props]);
+
+  // ========== PHASE 4: DCA Queue Processing Functions ==========
+  const getDCAQueueInfo = useCallback(async (): Promise<{length: number; items: any[]}> => {
+    if (!address) throw new Error('User address not available');
+    
+    try {
+      console.log('📋 PHASE 4: Fetching DCA queue information...');
+      const storageContract = await getSpendSaveStorageContract();
+      
+      const queueLength = await storageContract.getDcaQueueLength(address);
+      const length = queueLength.toNumber();
+      
+      console.log('📊 PHASE 4: DCA queue length:', length);
+      setDcaQueueLength(length);
+      
+      const items = [];
+      for (let i = 0; i < length; i++) {
+        try {
+          const item = await storageContract.getDcaQueueItem(address, i);
+          items.push({
+            index: i,
+            fromToken: item.fromToken,
+            toToken: item.toToken,
+            amount: item.amount.toString(),
+            executed: item.executed,
+            deadline: item.deadline.toNumber(),
+            customSlippageTolerance: item.customSlippageTolerance.toNumber()
+          });
+        } catch (error) {
+          console.warn(`Failed to fetch DCA queue item ${i}:`, error);
+        }
+      }
+      
+      return { length, items };
+    } catch (error) {
+      console.error('❌ PHASE 4: Failed to get DCA queue info:', error);
+      throw error;
+    }
+  }, [address, getSpendSaveStorageContract]);
+
+  const processDCAQueue = useCallback(async (): Promise<void> => {
+    if (!address || !signer) {
+      throw new Error('Wallet not connected for DCA processing');
+    }
+
+    console.log('🔄 PHASE 4: Starting DCA queue processing...');
+    setDcaQueueStatus('checking');
+    setIsDcaProcessing(true);
+    setDcaProcessingResults([]);
+
+    try {
+      // Get current queue info
+      const { length, items } = await getDCAQueueInfo();
+      
+      if (length === 0) {
+        console.log('✅ PHASE 4: No DCA items to process');
+        setDcaQueueStatus('completed');
+        setIsDcaProcessing(false);
+        return;
+      }
+
+      console.log(`🔄 PHASE 4: Processing ${length} DCA queue items...`);
+      setDcaQueueStatus('processing');
+
+      const dcaContract = await getDCAContract();
+      const results: typeof dcaProcessingResults = [];
+
+      // Process each unexecuted item
+      for (const item of items) {
+        if (item.executed) {
+          console.log(`⏭️ PHASE 4: Skipping already executed DCA item ${item.index}`);
+          continue;
+        }
+
+        console.log(`🔄 PHASE 4: Processing DCA item ${item.index}:`, {
+          fromToken: item.fromToken,
+          toToken: item.toToken,
+          amount: item.amount
+        });
+
+        const resultItem: {
+          index: number;
+          status: 'pending' | 'success' | 'failed';
+          txHash?: string;
+          error?: string;
+          fromToken: string;
+          toToken: string;
+          amount: string;
+        } = {
+          index: item.index,
+          status: 'pending',
+          fromToken: item.fromToken,
+          toToken: item.toToken,
+          amount: item.amount
+        };
+        
+        results.push(resultItem);
+        setDcaProcessingResults([...results]);
+
+        try {
+          // Create pool key for DCA swap
+          const storageContract = await getSpendSaveStorageContract();
+          const poolKey = await storageContract.createPoolKey(item.fromToken, item.toToken);
+          
+          // Determine swap direction
+          const zeroForOne = item.fromToken.toLowerCase() < item.toToken.toLowerCase();
+          
+          // Execute DCA swap
+          console.log(`🚀 PHASE 4: Executing DCA swap for item ${item.index}...`);
+          const tx = await dcaContract.executeDCASwap(
+            address,
+            item.fromToken,
+            item.toToken,
+            item.amount,
+            poolKey,
+            zeroForOne,
+            item.customSlippageTolerance || 50 // Default 0.5% slippage
+          );
+
+          console.log(`⏳ PHASE 4: DCA swap transaction sent: ${tx.hash}`);
+          resultItem.txHash = tx.hash; // Property 'txHash' does not exist on type '{ index: any; status: "pending"; fromToken: any; toToken: any; amount: any; }'.ts(2339)
+          setDcaProcessingResults([...results]);
+
+          // Wait for confirmation
+          const receipt = await tx.wait();
+          
+          if (receipt.status === 1) {
+            console.log(`✅ PHASE 4: DCA swap ${item.index} completed successfully`);
+            resultItem.status = 'success'; // Type '"success"' is not assignable to type '"pending"'.ts(2322)
+
+            
+            // Mark as executed in storage
+            const storageContract = await getSpendSaveStorageContract();
+            await storageContract.markDcaExecuted(address, item.index);
+            
+          } else {
+            throw new Error('Transaction failed');
+          }
+
+        } catch (error) {
+          console.error(`❌ PHASE 4: DCA swap ${item.index} failed:`, error);
+          resultItem.status = 'failed'; // Type '"failed"' is not assignable to type '"pending"'.ts(2322)
+          resultItem.error = error instanceof Error ? error.message : String(error); // Property 'error' does not exist on type '{ index: any; status: "pending"; fromToken: any; toToken: any; amount: any; }'.ts(2339)
+        }
+
+        setDcaProcessingResults([...results]);
+      }
+
+      // Final status update
+      const hasFailures = results.some(r => r.status === 'failed');
+      if (hasFailures) {
+        console.log('⚠️ PHASE 4: DCA processing completed with some failures');
+        setDcaQueueStatus('error');
+      } else {
+        console.log('✅ PHASE 4: All DCA swaps processed successfully');
+        setDcaQueueStatus('completed');
+      }
+
+    } catch (error) {
+      console.error('❌ PHASE 4: DCA queue processing failed:', error);
+      setDcaQueueStatus('error');
+      throw error;
+    } finally {
+      setIsDcaProcessing(false);
+    }
+  }, [address, signer, getDCAQueueInfo, getDCAContract, getSpendSaveStorageContract]);
+
+  const clearDCAResults = useCallback(() => {
+    console.log('🧹 PHASE 4: Clearing DCA processing results');
+    setDcaProcessingResults([]);
+    setDcaQueueStatus('idle');
+    setDcaQueueLength(0);
+  }, []);
 
   // ========== COMPUTED PROPERTIES ==========
   // PHASE 2: Enhanced execution gate with strict validation
@@ -646,6 +866,57 @@ export default function useSwapWithSavings(
     }
   }, [amount, actualSwapAmount, address, disableSavings, validateStrategy, props]);
 
+  // PHASE 4: Auto-trigger DCA processing after successful swap with savings
+  useEffect(() => {
+    if (isSuccess && !disableSavings && transactionHash) {
+      console.log('🔄 PHASE 4: Swap successful, checking for DCA processing...');
+      
+      // Check if user has DCA enabled in strategy
+      if (strategy.enableDCA) {
+        console.log('🔄 PHASE 4: DCA enabled in strategy, processing queue...');
+        
+        // Wait a bit for savings events to complete, then process DCA
+        const dcaTimeout = setTimeout(async () => {
+          try {
+            await processDCAQueue();
+          } catch (error) {
+            console.error('❌ PHASE 4: Auto DCA processing failed:', error);
+          }
+        }, 3000); // 3 second delay to ensure savings events are processed
+
+        return () => clearTimeout(dcaTimeout);
+      } else {
+        console.log('ℹ️ PHASE 4: DCA not enabled in strategy, skipping queue processing');
+      }
+    }
+  }, [isSuccess, disableSavings, transactionHash, strategy.enableDCA, processDCAQueue]);
+
+  // PHASE 4: DCA event monitoring integration
+  const onDCAProcessed = useCallback((callback: (data: any) => void) => {
+    addEventCallback('DCASwapExecuted', (data) => {
+      console.log('🔄 PHASE 4: DCA swap executed callback triggered:', data);
+      
+      setRealTimeEvents(prev => [...prev, {
+        eventName: 'DCASwapExecuted',
+        data,
+        timestamp: Date.now(),
+        processed: false
+      }]);
+      
+      callback(data);
+    });
+  }, [addEventCallback]);
+
+  // PHASE 3: Auto-cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (eventCleanupFunction) {
+        console.log('🧹 PHASE 3: Auto-cleanup on unmount');
+        eventCleanupFunction();
+      }
+    };
+  }, [eventCleanupFunction]);
+
   // ========== GAS ESTIMATION EFFECT ==========
   useEffect(() => {
     if (!props || !amount || parseFloat(amount) <= 0) return;
@@ -792,6 +1063,17 @@ export default function useSwapWithSavings(
       setTransactionHash(txHash);
       setExecutionStatus('pending');
       setSavedAmount(savingsPreview.rawAmount);
+
+      // PHASE 3: Set up event listener cleanup and real-time monitoring
+      if (txResponse.eventListeners) {
+        setEventCleanupFunction(() => txResponse.eventListeners!.cleanup);
+        setEventListenerStatus(txResponse.eventListeners.status);
+        
+        console.log('🎧 PHASE 3: Event listeners active, monitoring real-time events...');
+      }
+
+      // PHASE 4: Set up DCA processing trigger
+      console.log('🔄 PHASE 4: Setting up post-swap DCA processing...');
     } catch (swapError) {
       const errorMessage = swapError instanceof Error ? swapError.message : String(swapError);
       
@@ -827,14 +1109,14 @@ export default function useSwapWithSavings(
     sizeCategory,
     estimatedGasLimit,
     savingsPreview,
-    // Strategy-related returns
+    // PHASE 2: Strategy-related returns
     strategyValidation,
     isValidatingStrategy,
     isSettingUpStrategy,
     setupStrategy,
     canExecuteSwap,
     strategySetupRequired,
-    // Approval-related returns
+    // PHASE 3: Approval-related returns
     approvalStatus,
     approvalState,
     isCheckingApprovals,
@@ -843,12 +1125,20 @@ export default function useSwapWithSavings(
     approveAllTokens,
     refreshApprovals,
     canProceedWithApprovals,
-
+    // PHASE 3: Real-time event returns
     realTimeEvents,
     eventListenerStatus,
     onSavingsProcessed,
     onDCAQueued,
     onSwapError,
-    cleanupEventListeners
+    cleanupEventListeners,
+    // PHASE 4: DCA integration returns
+    dcaQueueStatus,
+    dcaQueueLength,
+    dcaProcessingResults,
+    isDcaProcessing,
+    processDCAQueue,
+    getDCAQueueInfo,
+    clearDCAResults
   };
 }
