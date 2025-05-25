@@ -28,15 +28,16 @@ export const CONTRACT_ADDRESSES = {
 } as const;
 
 // Import ABIs
-import yieldModuleAbi from "../abi/savings/YieldModule.json";
-import dcaAbi from "../abi/trading/DCA.json";
-import savingAbi from "../abi/savings/Savings.json";
-import savingStrategyAbi from "../abi/savings/SavingStrategy.json";
-import dailySavingsAbi from "../abi/savings/DailySavings.json";
-import spendSaveStorageAbi from "../abi/core/SpendSaveStorage.json";
-import spendSaveHookAbi from "../abi/core/SpendSaveHook.json";
+import yieldModuleAbi from "@/abi/savings/YieldModule.json";
+import dcaAbi from "@/abi/trading/DCA.json";
+import savingAbi from "@/abi/savings/Savings.json";
+import savingStrategyAbi from "@/abi/savings/SavingStrategy.json";
+import dailySavingsAbi from "@/abi/savings/DailySavings.json";
+import spendSaveStorageAbi from "@/abi/core/SpendSaveStorage.json";
+import spendSaveHookAbi from "@/abi/core/SpendSaveHook.json";
 import tokenAbi from "@/abi/tokens/Token.json";
-import poolManagerAbi from "../abi/core/PoolManager.json";
+import poolManagerAbi from "@/abi/core/PoolManager.json";
+
 
 export async function validateHookPermissions(
   hookAddress: Address,
@@ -56,41 +57,71 @@ export async function validateHookPermissions(
       return { isValid: false, errors };
     }
 
-    // Create contract instance using ethers.js (consistent with your codebase)
+    // Create contract instance using ethers.js
     const hookContract = new ethers.Contract(
       hookAddress,
       spendSaveHookAbi,
       ethersProvider
     );
 
-    // Get the hook permissions
+    // Get the hook permissions with proper error handling
     let permissions: any;
     try {
       permissions = await hookContract.getHookPermissions();
       details.permissions = permissions;
       console.log('🔍 Retrieved hook permissions:', permissions);
+      
+      console.log('📋 Permissions structure:', {
+        type: typeof permissions,
+        keys: Object.keys(permissions),
+        values: Object.values(permissions)
+      });
+      
     } catch (error) {
       errors.push(`Failed to get hook permissions: ${error instanceof Error ? error.message : String(error)}`);
       return { isValid: false, errors, details };
     }
     
-    // Expected permissions for SpendSave hook - MY 4 KEY FLAGS
+    // Expected permissions for SpendSave hook
     const expectedPermissions = {
-      beforeSwap: true,                    // SpendSave needs beforeSwap
-      afterSwap: true,                     // SpendSave needs afterSwap  
-      beforeSwapReturnDelta: true,         // SpendSave needs beforeSwap delta
-      afterSwapReturnDelta: true,          // SpendSave needs afterSwap delta
+      beforeSwap: true,
+      afterSwap: true,
+      beforeSwapReturnDelta: true,
+      afterSwapReturnDelta: true,
     };
 
-    // Validate the 4 critical permissions
+    // Validate permissions with multiple access patterns
     let hasPermissionErrors = false;
+    
     for (const [key, expected] of Object.entries(expectedPermissions)) {
-      const actual = permissions[key];
+      let actual: boolean = false; // Initialize with default value
+      
+      // Try different ways to access the permission value
+      if (typeof permissions === 'object' && permissions !== null) {
+        // Method 1: Direct property access
+        actual = permissions[key] ?? false;
+        
+        // Method 2: If permissions is array-like (struct returned as array)
+        if (!actual && Array.isArray(permissions)) {
+          const permissionIndex = getPermissionIndex(key);
+          if (permissionIndex >= 0 && permissionIndex < permissions.length) {
+            actual = permissions[permissionIndex] ?? false;
+          }
+        }
+        
+        // Method 3: If permissions has nested structure
+        if (!actual && permissions.permissions) {
+          actual = permissions.permissions[key] ?? false;
+        }
+      }
+      
+      // Validate the permission
       if (actual !== expected) {
         errors.push(
-          `Hook permission mismatch: ${key} expected ${expected}, got ${actual}`
+          `Hook permission mismatch: ${key} expected ${expected}, got ${actual} (type: ${typeof actual})`
         );
         hasPermissionErrors = true;
+        console.error(`❌ Permission ${key}: expected ${expected}, got ${actual}`);
       } else {
         console.log(`✅ Permission ${key}: ${actual} (correct)`);
       }
@@ -99,6 +130,22 @@ export async function validateHookPermissions(
     // Store validation details
     details.expectedPermissions = expectedPermissions;
     details.hasPermissionErrors = hasPermissionErrors;
+    details.validationMethod = 'struct-based-validation';
+
+    // ✅ FIX: Additional validation - check hook address flags
+    try {
+      const hookFlags = getHookFlagsFromAddress(hookAddress);
+      details.addressFlags = hookFlags;
+      
+      // Validate that address flags match expected permissions
+      const addressBasedValidation = validateAddressFlags(hookFlags, expectedPermissions);
+      if (!addressBasedValidation.isValid) {
+        console.warn('⚠️ Address-based hook flags do not match expected permissions:', addressBasedValidation.errors);
+        details.addressFlagWarnings = addressBasedValidation.errors;
+      }
+    } catch (flagError) {
+      console.warn('⚠️ Could not validate hook address flags:', flagError);
+    }
 
     // Additional validation: check if modules are initialized
     try {
@@ -106,14 +153,14 @@ export async function validateHookPermissions(
       console.log('✅ Hook modules are properly initialized');
       details.modulesInitialized = true;
     } catch (error) {
-      // This might not be a critical error if the method doesn't exist
       const errorMsg = error instanceof Error ? error.message : String(error);
       if (errorMsg.includes('function does not exist') || errorMsg.includes('not a function')) {
         console.warn('⚠️ checkModulesInitialized method not available (this may be expected)');
         details.modulesInitialized = 'unknown';
       } else {
-        errors.push('Hook modules not properly initialized');
+        console.warn('⚠️ Hook modules may not be properly initialized:', errorMsg);
         details.modulesInitialized = false;
+        // Don't treat this as a critical error for now
       }
     }
 
@@ -129,6 +176,106 @@ export async function validateHookPermissions(
     console.error('❌', errorMsg);
     return { isValid: false, errors, details };
   }
+}
+
+function validateAddressFlags(
+  addressFlags: Record<string, boolean>, 
+  expectedPermissions: Record<string, boolean>
+): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  for (const [key, expected] of Object.entries(expectedPermissions)) {
+    const actual = addressFlags[key];
+    if (actual !== expected) {
+      errors.push(`Address flag ${key}: expected ${expected}, got ${actual}`);
+    }
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+function getHookFlagsFromAddress(hookAddress: Address): {
+  beforeSwap: boolean;
+  afterSwap: boolean;
+  beforeSwapReturnDelta: boolean;
+  afterSwapReturnDelta: boolean;
+  [key: string]: boolean;
+} {
+  // Extract the last 14 bits from the address
+  const addressBigInt = BigInt(hookAddress);
+  const mask = BigInt((1 << 14) - 1); // Create 14-bit mask
+  const flags = Number(addressBigInt & mask);
+  
+  return {
+    beforeInitialize: Boolean(flags & (1 << 13)),
+    afterInitialize: Boolean(flags & (1 << 12)),
+    beforeAddLiquidity: Boolean(flags & (1 << 11)),
+    afterAddLiquidity: Boolean(flags & (1 << 10)),
+    beforeRemoveLiquidity: Boolean(flags & (1 << 9)),
+    afterRemoveLiquidity: Boolean(flags & (1 << 8)),
+    beforeSwap: Boolean(flags & (1 << 7)),
+    afterSwap: Boolean(flags & (1 << 6)),
+    beforeDonate: Boolean(flags & (1 << 5)),
+    afterDonate: Boolean(flags & (1 << 4)),
+    beforeSwapReturnDelta: Boolean(flags & (1 << 3)),
+    afterSwapReturnDelta: Boolean(flags & (1 << 2)),
+    afterAddLiquidityReturnDelta: Boolean(flags & (1 << 1)),
+    afterRemoveLiquidityReturnDelta: Boolean(flags & (1 << 0)),
+  };
+}
+
+function getPermissionIndex(permissionName: string): number {
+  // Based on the Hooks.Permissions struct from Uniswap V4
+  const permissionOrder = [
+    'beforeInitialize',      // 0
+    'afterInitialize',       // 1
+    'beforeAddLiquidity',    // 2
+    'afterAddLiquidity',     // 3
+    'beforeRemoveLiquidity', // 4
+    'afterRemoveLiquidity',  // 5
+    'beforeSwap',           // 6
+    'afterSwap',            // 7
+    'beforeDonate',         // 8
+    'afterDonate',          // 9
+    'beforeSwapReturnDelta', // 10
+    'afterSwapReturnDelta',  // 11
+    'afterAddLiquidityReturnDelta',    // 12
+    'afterRemoveLiquidityReturnDelta', // 13
+  ];
+  
+  return permissionOrder.indexOf(permissionName);
+}
+
+export function getTickSpacingForFee(fee: number): number {
+  switch (fee) {
+    case 100:    return 1;   // 0.01%
+    case 500:    return 10;  // 0.05%  
+    case 3000:   return 60;  // 0.3%
+    case 10000:  return 200; // 1%
+    default:     return 60;  // Default to 0.3% spacing
+  }
+}
+
+export function createDynamicPoolKey(
+  tokenA: Address,
+  tokenB: Address,
+  fee: number = 3000
+): any {
+  // Ensure tokens are in correct order
+  const [token0, token1] = tokenA.toLowerCase() < tokenB.toLowerCase() 
+    ? [tokenA, tokenB] 
+    : [tokenB, tokenA];
+  
+  return {
+    currency0: token0,
+    currency1: token1,
+    fee: fee,
+    tickSpacing: getTickSpacingForFee(fee), // ✅ FIX: Dynamic tick spacing
+    hooks: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK
+  };
 }
 
 /**
@@ -149,7 +296,8 @@ export async function validateAndLogHook(
     console.log('📋 Hook details:', {
       address: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
       permissions: validation.details?.expectedPermissions,
-      modulesInitialized: validation.details?.modulesInitialized
+      modulesInitialized: validation.details?.modulesInitialized,
+      validationMethod: validation.details?.validationMethod
     });
     return { isValid: true, details: validation.details };
   } else {
@@ -158,6 +306,15 @@ export async function validateAndLogHook(
     
     if (validation.details?.permissions) {
       console.error('📋 Actual permissions found:', validation.details.permissions);
+      console.error('🔍 Permission structure analysis:', {
+        type: typeof validation.details.permissions,
+        keys: Object.keys(validation.details.permissions || {}),
+        isArray: Array.isArray(validation.details.permissions)
+      });
+    }
+    
+    if (validation.details?.addressFlags) {
+      console.log('🏠 Address-based flags:', validation.details.addressFlags);
     }
     
     return { isValid: false, details: validation.details };

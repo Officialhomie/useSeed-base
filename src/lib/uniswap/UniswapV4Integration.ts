@@ -16,6 +16,35 @@ interface SwapWithSavingsParams {
   sqrtPriceLimitX96?: bigint;
 }
 
+export const UNISWAP_V4_FEE_TIERS = {
+  VERY_LOW: 100,    // 0.01%
+  LOW: 500,         // 0.05% 
+  MEDIUM: 3000,     // 0.3%
+  HIGH: 10000,      // 1%
+} as const;
+
+// ✅ FIX: Add tick spacing mapping
+export const FEE_TO_TICK_SPACING: Record<number, number> = {
+  [UNISWAP_V4_FEE_TIERS.VERY_LOW]: 1,    // 0.01% → 1
+  [UNISWAP_V4_FEE_TIERS.LOW]: 10,        // 0.05% → 10
+  [UNISWAP_V4_FEE_TIERS.MEDIUM]: 60,     // 0.3%  → 60
+  [UNISWAP_V4_FEE_TIERS.HIGH]: 200,      // 1%    → 200
+};
+
+// ✅ FIX: Validate fee tier
+export function isValidFeeTier(fee: number): boolean {
+  return Object.values(UNISWAP_V4_FEE_TIERS).includes(fee as any);
+}
+
+// ✅ FIX: Get tick spacing for fee tier with validation
+export function getTickSpacingForFee(fee: number): number {
+  if (!isValidFeeTier(fee)) {
+    console.warn(`Invalid fee tier ${fee}, using default 3000 (0.3%)`);
+    return FEE_TO_TICK_SPACING[UNISWAP_V4_FEE_TIERS.MEDIUM];
+  }
+  return FEE_TO_TICK_SPACING[fee];
+}
+
 
 
 
@@ -42,9 +71,8 @@ export function encodeSpendSaveHookData(userOrFlags: Address | {
     );
   }
   
-  // If it's a hook flags object
-  // For now, just return a simple hex string
-  // In a production implementation, this would encode the flags and path
+  // If it's a hook flags object - encode appropriately
+  // For now, just return empty bytes for flags (implement based on your hook's needs)
   return '0x';
 }
 
@@ -77,10 +105,21 @@ export function prepareSwapWithSavingsParams(
 export function createPoolKey(
   tokenA: Address,
   tokenB: Address,
-  fee: number = 3000 // Default fee of 0.3%
-): any {
-  // Ensure tokens are in correct order
-  const [token0, token1] = tokenA < tokenB 
+  fee: number = UNISWAP_V4_FEE_TIERS.MEDIUM // Default to 0.3%
+): {
+  currency0: Address;
+  currency1: Address; 
+  fee: number;
+  tickSpacing: number;
+  hooks: Address;
+} {
+  // ✅ FIX: Validate fee tier
+  if (!isValidFeeTier(fee)) {
+    throw new Error(`Invalid fee tier: ${fee}. Must be one of: ${Object.values(UNISWAP_V4_FEE_TIERS).join(', ')}`);
+  }
+
+  // Ensure tokens are in correct order (lexicographic)
+  const [token0, token1] = tokenA.toLowerCase() < tokenB.toLowerCase() 
     ? [tokenA, tokenB] 
     : [tokenB, tokenA];
   
@@ -88,9 +127,16 @@ export function createPoolKey(
     currency0: token0,
     currency1: token1,
     fee: fee,
-    tickSpacing: 60, // Default tick spacing for 0.3% pools
+    tickSpacing: getTickSpacingForFee(fee), // ✅ FIX: Dynamic tick spacing
     hooks: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK
   };
+}
+
+export function createPoolKeyWithDefaults(
+  tokenA: Address,
+  tokenB: Address
+): ReturnType<typeof createPoolKey> {
+  return createPoolKey(tokenA, tokenB, UNISWAP_V4_FEE_TIERS.MEDIUM);
 }
 
 
@@ -104,9 +150,17 @@ export function createPoolKey(
  * @param slippagePct Percentage (e.g. 0.5 for 0.5 %)
  */
 export function getSqrtPriceLimit(zeroForOne: boolean, slippagePct: number): bigint {
-  // Guard against bad input
+  // ✅ FIX: Better input validation
+  if (slippagePct < 0) {
+    throw new Error('Slippage percentage cannot be negative');
+  }
+  
+  if (slippagePct > 50) {
+    throw new Error('Slippage percentage too high (>50%). This is likely an error.');
+  }
+  
+  // Guard against bad input - use extreme boundaries for 0% slippage
   if (slippagePct <= 0) {
-    // 0 % ⇒ use the extreme boundary the protocol allows (+/- 1 to avoid exact boundary)
     return zeroForOne
       ? BigInt(MIN_SQRT_RATIO.toString()) + BigInt(1)
       : BigInt(MAX_SQRT_RATIO.toString()) - BigInt(1);
@@ -116,10 +170,20 @@ export function getSqrtPriceLimit(zeroForOne: boolean, slippagePct: number): big
   const MIN = BigInt(MIN_SQRT_RATIO.toString()) + BigInt(1);
   const MAX = BigInt(MAX_SQRT_RATIO.toString()) - BigInt(1);
 
+  // ✅ FIX: More precise slippage calculation
   // slippagePct is expressed as N %, we convert to parts-per-1e6 to keep precision
-  const slipPartsPerMillion = Math.round(slippagePct * 10_000); // 1 % = 10000 ppm
-
-  const delta = (MAX - MIN) * BigInt(slipPartsPerMillion) / BigInt(1000000);
-
-  return zeroForOne ? MIN + delta : MAX - delta;
-} 
+  const slipPartsPerMillion = Math.round(slippagePct * 10_000); // 1% = 10000 ppm
+  
+  // ✅ FIX: Add bounds checking for the calculation
+  const delta = (MAX - MIN) * BigInt(slipPartsPerMillion) / BigInt(1_000_000);
+  
+  const result = zeroForOne ? MIN + delta : MAX - delta;
+  
+  // ✅ FIX: Ensure result is within valid bounds
+  if (result <= MIN || result >= MAX) {
+    console.warn(`Calculated sqrt price limit ${result} is near boundaries, using safer default`);
+    return zeroForOne ? MIN + BigInt(1000) : MAX - BigInt(1000);
+  }
+  
+  return result;
+}

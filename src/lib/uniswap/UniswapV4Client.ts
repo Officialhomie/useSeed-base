@@ -13,9 +13,10 @@ import {
   Token,
   TradeType,
 } from '@uniswap/sdk-core'
-import { CONTRACT_ADDRESSES, validateHookPermissions } from '../contracts'
+import { CONTRACT_ADDRESSES, createDynamicPoolKey, validateHookPermissions } from '../contracts'
 import {
   CHAIN_ID,
+  getTokenBySymbol,
   SUPPORTED_TOKENS,
   SupportedTokenSymbol,
 } from './tokens'
@@ -28,6 +29,7 @@ import SpendSaveHookAbi from '@/abi/core/SpendSaveHook.json'
 import { BaseScanClient } from '../basescan/BaseScanClient'
 import SpendSaveHookABI from '@/abi/core/SpendSaveHook.json'
 import DCAABI from '@/abi/trading/DCA.json';
+import { Address } from 'viem'
 
 
 // Add interface for enhanced transaction result
@@ -57,6 +59,38 @@ interface EventListenerManager {
   getStatus: () => 'inactive' | 'listening' | 'completed' | 'error';
   getEventsReceived: () => string[];
   addEventCallback: (eventName: string, callback: (data: any) => void) => void;
+}
+
+export const UNISWAP_V4_CONSTANTS = {
+  FEE_TIERS: {
+    VERY_LOW: 100,    // 0.01%
+    LOW: 500,         // 0.05% 
+    MEDIUM: 3000,     // 0.3%
+    HIGH: 10000,      // 1%
+  },
+  TICK_SPACING: {
+    100: 1,     // 0.01% → 1
+    500: 10,    // 0.05% → 10
+    3000: 60,   // 0.3%  → 60
+    10000: 200, // 1%    → 200
+  },
+  DEFAULT_FEE: 3000,
+  DEFAULT_SLIPPAGE_BPS: 50, // 0.5%
+} as const;
+
+// ===== 6. Fix Savings Token Type Constants =====
+
+export const SAVINGS_TOKEN_TYPES = {
+  INPUT_TOKEN: 0,
+  OUTPUT_TOKEN: 1,
+  SPECIFIC_TOKEN: 2,
+} as const;
+
+export type SavingsTokenType = typeof SAVINGS_TOKEN_TYPES[keyof typeof SAVINGS_TOKEN_TYPES];
+
+// Helper function to validate savings token type
+export function isValidSavingsTokenType(value: number): value is SavingsTokenType {
+  return Object.values(SAVINGS_TOKEN_TYPES).includes(value as SavingsTokenType);
 }
 
 // Create a custom tick data provider to avoid "No tick data provider was given" error
@@ -969,6 +1003,7 @@ export class UniswapV4Client {
     toToken: SupportedTokenSymbol
     amountRaw: string
     slippageBps?: number
+    fee?: number
     deadlineSeconds?: number
     gasOverrideGwei?: number
     hookFlags?: HookFlags
@@ -994,6 +1029,7 @@ export class UniswapV4Client {
       toToken,
       amountRaw,
       slippageBps = 50, // Default to 0.5%
+      fee = 3000,
       disableSavings = false,
     } = params
 
@@ -1036,13 +1072,13 @@ export class UniswapV4Client {
       ? [tokenA.address, tokenB.address] 
       : [tokenB.address, tokenA.address];
     
-    const poolKey = {
-      currency0: token0,
-      currency1: token1,
-      fee: 3000, // 0.3% fee
-      tickSpacing: 60, // Standard tick spacing for 0.3% pools
-      hooks: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK
-    };
+    const poolKey = createDynamicPoolKey(
+      getTokenBySymbol(fromToken).address as Address,
+      getTokenBySymbol(toToken).address as Address,
+      fee
+    );
+
+    
 
     // Create SwapParams structure
     const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase();
