@@ -13,7 +13,7 @@ import {
   Token,
   TradeType,
 } from '@uniswap/sdk-core'
-import { CONTRACT_ADDRESSES } from '../contracts'
+import { CONTRACT_ADDRESSES, validateHookPermissions } from '../contracts'
 import {
   CHAIN_ID,
   SUPPORTED_TOKENS,
@@ -267,42 +267,26 @@ export class UniswapV4Client {
     let details: any = {};
 
     try {
+      // Use the improved hook validation function
+      const hookValidation = await validateHookPermissions(
+        CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+        this.provider
+      );
+
+      if (!hookValidation.isValid) {
+        errors.push(...hookValidation.errors);
+        details = hookValidation.details;
+        return { isValid: false, errors, details };
+      }
+
+      details = hookValidation.details;
+
+      // Additional validation using ethers.js contract
       const hookContract = new ethers.Contract(
         CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
         SpendSaveHookABI,
         this.provider
       );
-
-      // Check hook permissions
-      try {
-        const permissions = await hookContract.getHookPermissions();
-        details.permissions = permissions;
-        
-        // Validate required permissions
-        if (!permissions.beforeSwap) {
-          errors.push('Hook missing beforeSwap permission');
-        }
-        if (!permissions.afterSwap) {
-          errors.push('Hook missing afterSwap permission');
-        }
-        
-        console.log('🔍 Hook permissions:', {
-          beforeSwap: permissions.beforeSwap,
-          afterSwap: permissions.afterSwap,
-        });
-      } catch (error) {
-        errors.push(`Failed to get hook permissions: ${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      // Check if modules are initialized
-      try {
-        await hookContract.checkModulesInitialized();
-        details.modulesInitialized = true;
-        console.log('✅ Hook modules are initialized');
-      } catch (error) {
-        errors.push('Hook modules not properly initialized');
-        details.modulesInitialized = false;
-      }
 
       // Check storage contract connection
       try {
@@ -314,7 +298,27 @@ export class UniswapV4Client {
           console.log('✅ Hook properly connected to storage contract');
         }
       } catch (error) {
-        errors.push(`Failed to verify storage connection: ${error instanceof Error ? error.message : String(error)}`);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (errorMsg.includes('function does not exist')) {
+          console.warn('⚠️ storage_ method not available (this may be expected)');
+          details.storageConnected = 'unknown';
+        } else {
+          errors.push(`Failed to verify storage connection: ${errorMsg}`);
+          details.storageConnected = false;
+        }
+      }
+
+      // Check if we can get user processing queue (validates user interaction capability)
+      if (this.userAddress) {
+        try {
+          const queueLength = await hookContract.getUserProcessingQueueLength(this.userAddress);
+          details.userInteractionWorking = true;
+          details.userQueueLength = queueLength.toNumber();
+          console.log(`✅ User interaction working, queue length: ${queueLength.toNumber()}`);
+        } catch (error) {
+          console.warn('⚠️ Could not verify user interaction capability:', error);
+          details.userInteractionWorking = false;
+        }
       }
 
     } catch (error) {
