@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { Address } from 'viem'
 import { useWriteContract } from 'wagmi'
 import { CONTRACT_ADDRESSES } from '@/lib/contracts'
-import savingStrategyAbi from '@/ABI/SavingStrategy.json'
+import savingStrategyAbi from "@/abi/savings/SavingStrategy.json";
 
 /**
  * Hook that returns a function for writing the user SavingStrategy.

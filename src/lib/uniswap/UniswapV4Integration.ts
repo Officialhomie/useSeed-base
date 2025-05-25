@@ -16,46 +16,8 @@ interface SwapWithSavingsParams {
   sqrtPriceLimitX96?: bigint;
 }
 
-/**
- * Complexity multipliers for different operation types
- */
-export const OPERATION_COMPLEXITY = {
-  BASE_SWAP: 1.0,           // Basic swap operation
-  INPUT_SAVINGS: 1.3,       // Saving from input token
-  OUTPUT_SAVINGS: 1.4,       // Saving from output token
-  SPECIFIC_TOKEN: 1.7,       // Saving to specific token (requires swaps)
-  DCA_ENABLED: 1.5,          // DCA functionality enabled
-};
 
-/**
- * Gas estimates for different transaction sizes in ETH
- */
-export const TRANSACTION_SIZE_GAS = {
-  MICRO: {                   // < 0.001 ETH
-    multiplier: 1.5,
-    baseSwap: BigInt(400000),
-    withSavings: BigInt(600000),
-    withDca: BigInt(800000),
-  },
-  SMALL: {                   // 0.001 - 0.01 ETH
-    multiplier: 1.3,
-    baseSwap: BigInt(350000),
-    withSavings: BigInt(500000),
-    withDca: BigInt(650000),
-  },
-  MEDIUM: {                  // 0.01 - 0.1 ETH
-    multiplier: 1.1,
-    baseSwap: BigInt(300000),
-    withSavings: BigInt(450000),
-    withDca: BigInt(600000),
-  },
-  LARGE: {                   // > 0.1 ETH
-    multiplier: 1.0,
-    baseSwap: BigInt(250000),
-    withSavings: BigInt(400000),
-    withDca: BigInt(550000),
-  },
-};
+
 
 // Constants for min and max sqrt price ratios
 const MIN_SQRT_RATIO = JSBI.BigInt('4295128739'); // Same as TickMath.MIN_SQRT_RATIO
@@ -86,81 +48,7 @@ export function encodeSpendSaveHookData(userOrFlags: Address | {
   return '0x';
 }
 
-/**
- * Get transaction size category based on ETH amount
- * @param ethAmount Amount in ETH
- * @returns Transaction size category
- */
-export function getTransactionSizeCategory(ethAmount: number): 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE' {
-  if (ethAmount < 0.001) return 'MICRO';
-  if (ethAmount < 0.01) return 'SMALL';
-  if (ethAmount < 0.1) return 'MEDIUM';
-  return 'LARGE';
-}
 
-/**
- * Calculate gas limit for a Uniswap V4 swap with SpendSave hook
- * @param params Parameters for gas calculation
- * @returns Gas limit and information about fallback usage
- */
-export function calculateV4SwapGasLimit(params: {
-  fromToken: string;
-  toToken: string;
-  value: bigint | number;
-  savingsTokenType: number; 
-  enableDCA: boolean;
-  disableSavings: boolean;
-}): { gasLimit: bigint; usingFallback: boolean; sizeCategory: string } {
-  const { fromToken, toToken, value, savingsTokenType, enableDCA, disableSavings } = params;
-  
-  // Get transaction size category
-  let ethAmount = 0;
-  
-  if (typeof value === 'bigint') {
-    ethAmount = Number(value) / 1e18;
-  } else {
-    ethAmount = value;
-  }
-  
-  const sizeCategory = getTransactionSizeCategory(ethAmount);
-  const sizeTier = TRANSACTION_SIZE_GAS[sizeCategory];
-  
-  // Determine base gas based on transaction characteristics
-  let baseGas: bigint;
-  
-  if (disableSavings) {
-    // Just a basic swap
-    baseGas = sizeTier.baseSwap;
-  } else {
-    // With savings features
-    if (enableDCA) {
-      baseGas = sizeTier.withDca;
-    } else {
-      baseGas = sizeTier.withSavings;
-    }
-    
-    // Apply savings type multiplier
-    let typeFactor = 1.0;
-    if (savingsTokenType === 0) { // INPUT
-      typeFactor = OPERATION_COMPLEXITY.INPUT_SAVINGS;
-    } else if (savingsTokenType === 1) { // OUTPUT
-      typeFactor = OPERATION_COMPLEXITY.OUTPUT_SAVINGS;
-    } else if (savingsTokenType === 2) { // SPECIFIC
-      typeFactor = OPERATION_COMPLEXITY.SPECIFIC_TOKEN;
-    }
-    
-    baseGas = BigInt(Math.ceil(Number(baseGas) * typeFactor));
-  }
-  
-  // Apply size category multiplier
-  baseGas = BigInt(Math.ceil(Number(baseGas) * sizeTier.multiplier));
-  
-  return {
-    gasLimit: baseGas,
-    usingFallback: true, // Always using calculated values for reliability
-    sizeCategory: sizeCategory
-  };
-}
 
 /**
  * Prepare swap parameters for Uniswap V4 Router with SpendSave hook
@@ -205,65 +93,6 @@ export function createPoolKey(
   };
 }
 
-/**
- * Calculate buffer for ETH transactions to ensure enough is left for gas
- * @param ethBalance User's ETH balance
- * @param txSize Transaction size category
- * @returns Recommended buffer in ETH
- */
-export function calculateEthBuffer(
-  ethBalance: number,
-  txSize: 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE'
-): number {
-  // Using the default gas price from gas oracle (fallback value is 30 gwei)
-  // Converting to a synchronous operation for this utility function
-  const estimatedGasPrice = 30; // gwei - will be overridden in async contexts
-  
-  // Gas limits from transaction size tiers
-  const gasLimit = Number(TRANSACTION_SIZE_GAS[txSize].withDca);
-  
-  // Calculate estimated gas cost in ETH
-  // gas_limit * gas_price(gwei) * 10^-9
-  const estimatedGasCost = gasLimit * estimatedGasPrice * 1e-9;
-  
-  // Add 20% safety margin
-  const withSafetyMargin = estimatedGasCost * 1.2;
-  
-  // Cap at percentage of balance for very small balances
-  const maxBuffer = ethBalance * 0.2; // Max 20% of balance
-  
-  return Math.min(withSafetyMargin, maxBuffer);
-}
-
-/**
- * Calculate buffer for ETH transactions asynchronously using current gas prices
- * @param ethBalance User's ETH balance
- * @param txSize Transaction size category
- * @returns Promise resolving to recommended buffer in ETH
- */
-export async function calculateEthBufferAsync(
-  ethBalance: number,
-  txSize: 'MICRO' | 'SMALL' | 'MEDIUM' | 'LARGE'
-): Promise<number> {
-  // Get current gas price from oracle
-  const gasPriceBN = await fetchFallbackGas();
-  const gasPriceGwei = Number(ethers.utils.formatUnits(gasPriceBN, 'gwei'));
-  
-  // Gas limits from transaction size tiers
-  const gasLimit = Number(TRANSACTION_SIZE_GAS[txSize].withDca);
-  
-  // Calculate estimated gas cost in ETH
-  // gas_limit * gas_price(gwei) * 10^-9
-  const estimatedGasCost = gasLimit * gasPriceGwei * 1e-9;
-  
-  // Add 20% safety margin
-  const withSafetyMargin = estimatedGasCost * 1.2;
-  
-  // Cap at percentage of balance for very small balances
-  const maxBuffer = ethBalance * 0.2; // Max 20% of balance
-  
-  return Math.min(withSafetyMargin, maxBuffer);
-}
 
 /**
  * Derive a sqrtPriceLimitX96 based on user slippage percentage.

@@ -2,6 +2,8 @@ import { createPublicClient, Address, Hex, http, Chain, getContract } from "viem
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { spendPermissionManagerAbi, spendPermissionManagerAddress } from "./abi/SpendPermissionManager";
+import { ethers } from 'ethers';
+
 
 // Contract addresses
 export const CONTRACT_ADDRESSES = {
@@ -33,8 +35,136 @@ import savingStrategyAbi from "../abi/savings/SavingStrategy.json";
 import dailySavingsAbi from "../abi/savings/DailySavings.json";
 import spendSaveStorageAbi from "../abi/core/SpendSaveStorage.json";
 import spendSaveHookAbi from "../abi/core/SpendSaveHook.json";
-import tokenAbi from "../abi/tokens/Token.json";
+import tokenAbi from "@/abi/tokens/Token.json";
 import poolManagerAbi from "../abi/core/PoolManager.json";
+
+export async function validateHookPermissions(
+  hookAddress: Address,
+  provider?: ethers.providers.Provider
+): Promise<{ isValid: boolean; errors: string[]; details?: any }> {
+  const errors: string[] = [];
+  let details: any = {};
+
+  try {
+    // Use provided provider or create a new one
+    const ethersProvider = provider || new ethers.providers.JsonRpcProvider('https://mainnet.base.org');
+
+    // Check if contract exists at the address
+    const code = await ethersProvider.getCode(hookAddress);
+    if (!code || code === '0x' || code === '0x0') {
+      errors.push(`No contract deployed at hook address: ${hookAddress}`);
+      return { isValid: false, errors };
+    }
+
+    // Create contract instance using ethers.js (consistent with your codebase)
+    const hookContract = new ethers.Contract(
+      hookAddress,
+      spendSaveHookAbi,
+      ethersProvider
+    );
+
+    // Get the hook permissions
+    let permissions: any;
+    try {
+      permissions = await hookContract.getHookPermissions();
+      details.permissions = permissions;
+      console.log('🔍 Retrieved hook permissions:', permissions);
+    } catch (error) {
+      errors.push(`Failed to get hook permissions: ${error instanceof Error ? error.message : String(error)}`);
+      return { isValid: false, errors, details };
+    }
+    
+    // Expected permissions for SpendSave hook - MY 4 KEY FLAGS
+    const expectedPermissions = {
+      beforeSwap: true,                    // SpendSave needs beforeSwap
+      afterSwap: true,                     // SpendSave needs afterSwap  
+      beforeSwapReturnDelta: true,         // SpendSave needs beforeSwap delta
+      afterSwapReturnDelta: true,          // SpendSave needs afterSwap delta
+    };
+
+    // Validate the 4 critical permissions
+    let hasPermissionErrors = false;
+    for (const [key, expected] of Object.entries(expectedPermissions)) {
+      const actual = permissions[key];
+      if (actual !== expected) {
+        errors.push(
+          `Hook permission mismatch: ${key} expected ${expected}, got ${actual}`
+        );
+        hasPermissionErrors = true;
+      } else {
+        console.log(`✅ Permission ${key}: ${actual} (correct)`);
+      }
+    }
+
+    // Store validation details
+    details.expectedPermissions = expectedPermissions;
+    details.hasPermissionErrors = hasPermissionErrors;
+
+    // Additional validation: check if modules are initialized
+    try {
+      await hookContract.checkModulesInitialized();
+      console.log('✅ Hook modules are properly initialized');
+      details.modulesInitialized = true;
+    } catch (error) {
+      // This might not be a critical error if the method doesn't exist
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('function does not exist') || errorMsg.includes('not a function')) {
+        console.warn('⚠️ checkModulesInitialized method not available (this may be expected)');
+        details.modulesInitialized = 'unknown';
+      } else {
+        errors.push('Hook modules not properly initialized');
+        details.modulesInitialized = false;
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      details
+    };
+
+  } catch (error) {
+    const errorMsg = `Hook validation failed: ${error instanceof Error ? error.message : String(error)}`;
+    errors.push(errorMsg);
+    console.error('❌', errorMsg);
+    return { isValid: false, errors, details };
+  }
+}
+
+/**
+ * Validate hook address and log results
+ */
+export async function validateAndLogHook(
+  provider?: ethers.providers.Provider
+): Promise<{ isValid: boolean; details: any }> {
+  console.log('🔍 Validating SpendSave hook permissions...');
+  
+  const validation = await validateHookPermissions(
+    CONTRACT_ADDRESSES.SPEND_SAVE_HOOK, 
+    provider
+  );
+  
+  if (validation.isValid) {
+    console.log('✅ Hook permissions validation passed');
+    console.log('📋 Hook details:', {
+      address: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+      permissions: validation.details?.expectedPermissions,
+      modulesInitialized: validation.details?.modulesInitialized
+    });
+    return { isValid: true, details: validation.details };
+  } else {
+    console.error('❌ Hook permissions validation failed:');
+    validation.errors.forEach(error => console.error(`  - ${error}`));
+    
+    if (validation.details?.permissions) {
+      console.error('📋 Actual permissions found:', validation.details.permissions);
+    }
+    
+    return { isValid: false, details: validation.details };
+  }
+}
+
+
 
 // Initialize public client
 export const getPublicClient = (chain: Chain = base) => {

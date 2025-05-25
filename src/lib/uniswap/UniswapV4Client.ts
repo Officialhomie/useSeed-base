@@ -162,6 +162,7 @@ export class UniswapV4Client {
 
   private activeEventListeners: Map<string, EventListenerManager> = new Map();
   private eventCallbacks: Map<string, Array<(data: any) => void>> = new Map();
+  private contractsValidated: boolean = false;
 
   constructor(provider: ethers.providers.Provider, signer?: ethers.Signer) {
     this.provider = provider
@@ -194,10 +195,181 @@ export class UniswapV4Client {
     }
   }
 
+  async validateContractDeployments(): Promise<{
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  }> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    console.log('🔍 Validating contract deployments...');
+
+    // Core contracts that must exist
+    const coreContracts = [
+      { name: 'SpendSaveHook', address: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK },
+      { name: 'SpendSaveStorage', address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE },
+      { name: 'PoolManager', address: CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER },
+    ];
+
+    // Module contracts (important but not critical)
+    const moduleContracts = [
+      { name: 'SavingStrategy', address: CONTRACT_ADDRESSES.SAVING_STRATEGY },
+      { name: 'SavingsModule', address: CONTRACT_ADDRESSES.SAVING },
+      { name: 'DCAModule', address: CONTRACT_ADDRESSES.DCA },
+      { name: 'YieldModule', address: CONTRACT_ADDRESSES.YIELD_MODULE },
+      { name: 'DailySavingsModule', address: CONTRACT_ADDRESSES.DAILY_SAVINGS },
+      { name: 'TokenModule', address: CONTRACT_ADDRESSES.TOKEN },
+      { name: 'SlippageControlModule', address: CONTRACT_ADDRESSES.SLIPPAGE_CONTROL },
+    ];
+
+    // Check core contracts
+    for (const contract of coreContracts) {
+      try {
+        const code = await this.provider.getCode(contract.address);
+        if (!code || code === '0x' || code === '0x0') {
+          errors.push(`❌ ${contract.name} not deployed at ${contract.address}`);
+        } else {
+          console.log(`✅ ${contract.name} verified at ${contract.address}`);
+        }
+      } catch (error) {
+        errors.push(`❌ Failed to check ${contract.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // Check module contracts (warnings only)
+    for (const contract of moduleContracts) {
+      try {
+        const code = await this.provider.getCode(contract.address);
+        if (!code || code === '0x' || code === '0x0') {
+          warnings.push(`⚠️ ${contract.name} not deployed at ${contract.address}`);
+        } else {
+          console.log(`✅ ${contract.name} verified at ${contract.address}`);
+        }
+      } catch (error) {
+        warnings.push(`⚠️ Could not verify ${contract.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  async validateSpendSaveHookIntegration(): Promise<{
+    isValid: boolean;
+    errors: string[];
+    details: any;
+  }> {
+    const errors: string[] = [];
+    let details: any = {};
+
+    try {
+      const hookContract = new ethers.Contract(
+        CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
+        SpendSaveHookABI,
+        this.provider
+      );
+
+      // Check hook permissions
+      try {
+        const permissions = await hookContract.getHookPermissions();
+        details.permissions = permissions;
+        
+        // Validate required permissions
+        if (!permissions.beforeSwap) {
+          errors.push('Hook missing beforeSwap permission');
+        }
+        if (!permissions.afterSwap) {
+          errors.push('Hook missing afterSwap permission');
+        }
+        
+        console.log('🔍 Hook permissions:', {
+          beforeSwap: permissions.beforeSwap,
+          afterSwap: permissions.afterSwap,
+        });
+      } catch (error) {
+        errors.push(`Failed to get hook permissions: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // Check if modules are initialized
+      try {
+        await hookContract.checkModulesInitialized();
+        details.modulesInitialized = true;
+        console.log('✅ Hook modules are initialized');
+      } catch (error) {
+        errors.push('Hook modules not properly initialized');
+        details.modulesInitialized = false;
+      }
+
+      // Check storage contract connection
+      try {
+        const storageAddress = await hookContract.storage_();
+        if (storageAddress.toLowerCase() !== CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE.toLowerCase()) {
+          errors.push(`Hook storage address mismatch: expected ${CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE}, got ${storageAddress}`);
+        } else {
+          details.storageConnected = true;
+          console.log('✅ Hook properly connected to storage contract');
+        }
+      } catch (error) {
+        errors.push(`Failed to verify storage connection: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+    } catch (error) {
+      errors.push(`Hook validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      details
+    };
+  }
+
+  async validateAllContracts(): Promise<boolean> {
+    if (this.contractsValidated) {
+      return true; // Already validated
+    }
+
+    console.log('🚀 Starting comprehensive contract validation...');
+
+    // 1. Validate contract deployments
+    const deploymentValidation = await this.validateContractDeployments();
+    
+    if (!deploymentValidation.isValid) {
+      console.error('❌ Contract deployment validation failed:');
+      deploymentValidation.errors.forEach(error => console.error(`  ${error}`));
+      return false;
+    }
+
+    if (deploymentValidation.warnings.length > 0) {
+      console.warn('⚠️ Contract deployment warnings:');
+      deploymentValidation.warnings.forEach(warning => console.warn(`  ${warning}`));
+    }
+
+    // 2. Validate SpendSave hook integration
+    const hookValidation = await this.validateSpendSaveHookIntegration();
+    
+    if (!hookValidation.isValid) {
+      console.error('❌ SpendSave hook validation failed:');
+      hookValidation.errors.forEach(error => console.error(`  ${error}`));
+      return false;
+    }
+
+    console.log('✅ All contract validations passed');
+    this.contractsValidated = true;
+    return true;
+  }
+
+  
+
+
   /**
    * PHASE 1: Verify SpendSaveHook Integration
    * Confirms that the SpendSaveHook is properly initialized and accessible
-   */
+   */                                      
   async verifyHookIntegration(): Promise<boolean> {
     try {
       console.log('🔍 Phase 1: Verifying SpendSaveHook integration...');
@@ -268,8 +440,13 @@ export class UniswapV4Client {
           await this.detectNetwork();
         } catch (networkErr) {
           console.error('Network detection failed during initialization');
-          // Continue with initialization but flag the issue
         }
+      }
+
+      // Validate all contracts before proceeding
+      const contractsValid = await this.validateAllContracts();
+      if (!contractsValid) {
+        throw new Error('Contract validation failed - cannot proceed with initialization');
       }
 
       // Get ETH price from BaseScan API
@@ -283,10 +460,10 @@ export class UniswapV4Client {
       }
       
       this.isInitialized = true;
+      console.log('✅ UniswapV4Client initialized successfully with contract validation');
     } catch (error) {
       console.error("Failed to initialize UniswapV4Client:", error);
-      // Mark as initialized with error to prevent continuous retries
-      this.isInitialized = true;
+      this.isInitialized = true; // Mark as initialized to prevent retries
       throw error;
     }
   }
@@ -813,7 +990,6 @@ export class UniswapV4Client {
       toToken,
       amountRaw,
       slippageBps = 50, // Default to 0.5%
-      gasOverrideGwei,
       disableSavings = false,
     } = params
 
@@ -887,29 +1063,6 @@ export class UniswapV4Client {
       valueToSend: valueToSend.toString()
     });
 
-    let gasPrice: ethers.BigNumber | undefined
-    if (gasOverrideGwei !== undefined) {
-      gasPrice = ethers.utils.parseUnits(gasOverrideGwei.toString(), 'gwei')
-    } else {
-      // lazy import to avoid circular deps
-      const { fetchOnChainGas, fetchFallbackGas } = await import('../gas/gasOracle')
-      try {
-        gasPrice = await fetchOnChainGas(this.provider)
-      } catch (_) {
-        gasPrice = await fetchFallbackGas()
-      }
-    }
-
-    // calculate conservative gasLimit
-    const { calculateV4SwapGasLimit } = await import('./UniswapV4Integration')
-    const { gasLimit } = calculateV4SwapGasLimit({
-      fromToken,
-      toToken,
-      value: parseFloat(amountRaw),
-      savingsTokenType: 0,
-      enableDCA: false,
-      disableSavings,
-    })
 
     try {
       console.log('🚀 PHASE 3: Executing PoolManager.swap with real-time event listening...');
@@ -923,8 +1076,6 @@ export class UniswapV4Client {
         hookData,
         {
           value: valueToSend,
-          gasPrice,
-          gasLimit
         }
       );
       

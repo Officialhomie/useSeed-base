@@ -6,7 +6,6 @@ import { getEthersProvider } from '../utils/ethersAdapter';
 import { UniswapV4Client } from '../uniswap/UniswapV4Client';
 import { SpendSaveStrategy } from './useSpendSaveStrategy';
 import { SupportedTokenSymbol, getTokenBySymbol } from '../uniswap/tokens';
-import { calculateV4SwapGasLimit } from '../uniswap/UniswapV4Integration';
 import useSavingsPreview from './useSavingsPreview';
 import { useTokenApprovals } from './useTokenApprovals';
 import { CONTRACT_ADDRESSES } from '../contracts';
@@ -59,8 +58,6 @@ interface UseSwapWithSavingsProps {
   strategy: SpendSaveStrategy;
   overridePercentage: number | null;
   disableSavings: boolean;
-  customGasPrice?: number | null;
-  gasPriceCategory?: 'safe' | 'standard' | 'fast';
 }
 
 interface SwapWithSavingsResult {
@@ -73,10 +70,6 @@ interface SwapWithSavingsResult {
   isLoading: boolean;
   isSuccess: boolean;
   isPreparing: boolean;
-  usingFallbackGas: boolean;
-  gasEstimate: string;
-  sizeCategory?: string;
-  estimatedGasLimit: number;
   savingsPreview: {
     rawAmount: string;
     formattedAmount: string;
@@ -138,11 +131,7 @@ export default function useSwapWithSavings(
   const [error, setError] = useState<Error | null>(null);
   const [savedAmount, setSavedAmount] = useState('0');
   const [transactionHash, setTransactionHash] = useState<`0x${string}` | null>(null);
-  const [usingFallbackGas, setUsingFallbackGas] = useState(false);
-  const [gasEstimate, setGasEstimate] = useState('0');
-  const [sizeCategory, setSizeCategory] = useState<string | undefined>(undefined);
   const [client, setClient] = useState<UniswapV4Client | null>(null);
-  const [estimatedGasLimit, setEstimatedGasLimit] = useState<number>(250000);
   const [isValidatingStrategy, setIsValidatingStrategy] = useState(false);
   const [isSettingUpStrategy, setIsSettingUpStrategy] = useState(false);
   const [strategyValidation, setStrategyValidation] = useState<StrategyValidationResult>({
@@ -197,8 +186,7 @@ export default function useSwapWithSavings(
   };
   const overridePercentage = props?.overridePercentage || null;
   const disableSavings = props?.disableSavings || false;
-  const customGasPrice = props?.customGasPrice || null;
-  const gasPriceCategory = props?.gasPriceCategory || 'safe';
+
 
   // Get token info for approvals
   const fromTokenInfo = props ? getTokenBySymbol(props.fromToken) : null;
@@ -917,38 +905,6 @@ export default function useSwapWithSavings(
     };
   }, [eventCleanupFunction]);
 
-  // ========== GAS ESTIMATION EFFECT ==========
-  useEffect(() => {
-    if (!props || !amount || parseFloat(amount) <= 0) return;
-
-    const valueToSend = fromToken === 'ETH' ? BigInt(parseUnits(amount, 18)) : BigInt(0);
-    
-    const { gasLimit, usingFallback, sizeCategory: txSizeCategory } = calculateV4SwapGasLimit({
-      fromToken,
-      toToken,
-      value: valueToSend,
-      savingsTokenType: strategy.savingsTokenType,
-      enableDCA: strategy.enableDCA,
-      disableSavings
-    });
-
-    const gasPrice = BigInt(30) * BigInt(1000000000); // 30 gwei
-    const gasEstimateWei = gasLimit * gasPrice;
-    const gasEstimateEth = (Number(gasEstimateWei) / 1e18).toString();
-    
-    setEstimatedGasLimit(Number(gasLimit));
-    setUsingFallbackGas(usingFallback);
-    setGasEstimate(gasEstimateEth);
-    setSizeCategory(txSizeCategory);
-  }, [
-    props,
-    fromToken,
-    toToken,
-    amount,
-    strategy.savingsTokenType,
-    strategy.enableDCA,
-    disableSavings
-  ]);
 
   // ========== PHASE 2: ENHANCED SWAP EXECUTION WITH BLOCKING VALIDATION ==========
   const executeSwapFunction = async () => {
@@ -1104,10 +1060,6 @@ export default function useSwapWithSavings(
     isLoading,
     isSuccess,
     isPreparing: executionStatus === 'preparing',
-    usingFallbackGas,
-    gasEstimate,
-    sizeCategory,
-    estimatedGasLimit,
     savingsPreview,
     // PHASE 2: Strategy-related returns
     strategyValidation,
