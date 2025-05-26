@@ -422,7 +422,7 @@ export default function SwapWithSavings() {
         const ethBalance = parseFloat(tokenBalances.ETH.formattedBalance);
         
         // Reserve a small amount for gas fees (0.001 ETH)
-        const gasReserve = 0.001;
+        const gasReserve = 0.0001;
         
         // Prevent negative values if balance is too small
         maxAmount = Math.max(0, ethBalance - gasReserve);

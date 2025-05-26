@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { Address } from "viem";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
-import SavingStrategyABI from "@/ABI/SavingStrategy.json";
-import SpendSaveStorageABI from "@/ABI/SpenSaveStorage.json";
+import SavingStrategyABI from "@/abi/savings/SavingStrategy.json";
+import SpendSaveStorageABI from "@/abi/core/SpendSaveStorage.json";
 
 // Define SavingsTokenType enum to match contract
 enum SavingsTokenType {

@@ -5,7 +5,7 @@ import { calculateSavingsAmount } from '@/lib/utils/savingsCalculator';
 import { Address } from 'viem';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { useAccount, useReadContract } from 'wagmi';
-import AnimatedProgressBar from './onboarding/AnimatedProgressBar';
+import AnimatedProgressBar from '@/components/onboarding/AnimatedProgressBar';
 import { motion } from 'framer-motion';
 
 interface SavingsVisualizerProps {
