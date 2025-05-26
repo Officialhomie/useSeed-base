@@ -4,14 +4,14 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { parseUnits, Address } from 'viem';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import toast from 'react-hot-toast';
+import SavingStrategyABI from '@/abi/savings/SavingStrategy.json'
 
 // Define SavingsTokenType enum to match contract
 enum SavingsTokenType {
-  INPUT = 0,
-  OUTPUT = 1,
-  SPECIFIC = 2
+  OUTPUT = 0, 
+  INPUT = 1,     
+  SPECIFIC = 2   
 }
-
 // Token options
 const TOKEN_OPTIONS = [
   { value: CONTRACT_ADDRESSES.ETH, label: "ETH" },
@@ -230,23 +230,7 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
       // Call contract to set saving strategy
       writeContract({
         address: CONTRACT_ADDRESSES.SAVING_STRATEGY,
-        abi: [
-          {
-            name: 'setSavingStrategy',
-            type: 'function',
-            stateMutability: 'nonpayable',
-            inputs: [
-              { name: 'user', type: 'address' },
-              { name: 'percentage', type: 'uint256' },
-              { name: 'autoIncrementPercentage', type: 'uint256' },
-              { name: 'maxPercentage', type: 'uint256' },
-              { name: 'roundUpSavings', type: 'bool' },
-              { name: 'savingsTokenType', type: 'uint8' },
-              { name: 'specificTokenAddress', type: 'address' }
-            ],
-            outputs: []
-          }
-        ],
+        abi: SavingStrategyABI,
         functionName: 'setSavingStrategy',
         args: [
           address,

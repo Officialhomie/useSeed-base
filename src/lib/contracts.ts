@@ -350,6 +350,18 @@ export const SAVINGS_CONTRACTS = {
   HOOK: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK,
 } as const;
 
+export const SAVINGS_STRATEGY_CONFIG = {
+  CONTRACT_ADDRESS: CONTRACT_ADDRESSES.SAVING_STRATEGY, //  SavingStrategy module
+  FUNCTION_NAME: 'setSavingStrategy' as const,           //  Public interface
+  READ_FUNCTION_NAME: 'getUserSavingStrategy' as const   //  Read from storage
+} as const;
+
+// Keep reading from SpendSaveStorage (where data is stored)
+export const SAVINGS_STORAGE_CONFIG = {
+  CONTRACT_ADDRESS: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
+  READ_FUNCTION_NAME: 'getUserSavingStrategy' as const
+} as const;
+
 // ========== TYPE EXPORTS FOR TYPE SAFETY ==========
 export type ContractAddressKey = keyof typeof CONTRACT_ADDRESSES;
 export type TokenSymbol = keyof typeof TOKEN_ADDRESSES;

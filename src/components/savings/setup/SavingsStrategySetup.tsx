@@ -8,6 +8,7 @@ import { CONTRACT_ADDRESSES } from "@/lib/contracts";
 import SavingStrategyABI from "@/abi/savings/SavingStrategy.json";
 import SpendSaveStorageABI from "@/abi/core/SpendSaveStorage.json";
 
+
 // Define SavingsTokenType enum to match contract
 enum SavingsTokenType {
   OUTPUT = 0,

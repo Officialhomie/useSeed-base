@@ -1,8 +1,12 @@
 import { useCallback } from 'react'
 import { Address } from 'viem'
-import { useWriteContract } from 'wagmi'
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { CONTRACT_ADDRESSES } from '@/lib/contracts'
 import savingStrategyAbi from "@/abi/savings/SavingStrategy.json";
+import { SAVINGS_STRATEGY_CONFIG } from '@/lib/contracts';
+// import { SavingsStrategy, validatePercentage } from '@/lib/types/SavingsStrategy';
+
+
 
 /**
  * Hook that returns a function for writing the user SavingStrategy.
