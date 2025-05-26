@@ -83,6 +83,22 @@ export default function SavingsStrategySetup({ onComplete }: { onComplete: () =>
 
   const handleSubmit = async () => {
     if (!address) return;
+
+    if (strategy.percentage < 1 || strategy.percentage > 50) {
+      console.error("Invalid percentage: must be between 1-50%");
+      return;
+    }
+
+    if (strategy.maxPercentage < strategy.percentage) {
+      console.error("Max percentage must be >= current percentage");
+      return;
+    }
+
+    if (strategy.savingsTokenType === SavingsTokenType.SPECIFIC && 
+        (!strategy.specificToken || strategy.specificToken === "0x0000000000000000000000000000000000000000")) {
+      console.error("Specific token required when savings type is SPECIFIC");
+      return;
+    }
     
     try {
       // Convert percentage values to basis points for contract (e.g., 10% becomes 1000)
@@ -92,21 +108,19 @@ export default function SavingsStrategySetup({ onComplete }: { onComplete: () =>
 
       // Call contract to set saving strategy
       writeContract({
-        address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
-        abi: SpendSaveStorageABI,
-        functionName: 'setUserSavingStrategy',
+        address: CONTRACT_ADDRESSES.SAVING_STRATEGY,
+        abi: SavingStrategyABI,
+        functionName: 'setSavingStrategy',
         args: [
           address,
           BigInt(percentageBasisPoints),
           BigInt(autoIncrementBasisPoints),
-          BigInt(maxPercentageBasisPoints),
-          BigInt(0), // goalAmount - we don't set it here
+          BigInt(maxPercentageBasisPoints), 
           strategy.roundUpSavings,
-          false, // enableDCA - we don't enable it here
           strategy.savingsTokenType,
           strategy.savingsTokenType === SavingsTokenType.SPECIFIC 
             ? strategy.specificToken
-            : "0x0000000000000000000000000000000000000000" as Address // Zero address if not specific token
+            : "0x0000000000000000000000000000000000000000" as Address
         ]
       });
     } catch (error) {

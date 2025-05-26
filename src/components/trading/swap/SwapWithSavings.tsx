@@ -19,6 +19,7 @@ import SavingsRatioIndicator from '@/components/savings/visualisation/SavingsRat
 import { cn } from '@/lib/utils';
 import SavingsSummary from '@/components/savings/overview/SavingsSummary';
 import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
+import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 
 // ========== PHASE 3: Import Approval Components ==========
 import { 
@@ -56,6 +57,13 @@ const StrategySetupModal = ({
 
   const handleSetup = async () => {
     try {
+      if (percentage < 1 || percentage > 50) {
+        throw new Error("Percentage must be between 1% and 50%");
+      }
+      
+      if (savingsTokenType === 2 && !CONTRACT_ADDRESSES.ETH) { // Example check
+        throw new Error("Invalid specific token selection");
+      }
       await onSetupStrategy({
         percentage,
         savingsTokenType,

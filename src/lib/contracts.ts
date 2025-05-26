@@ -380,6 +380,23 @@ export const getContractInstance = (
   });
 };
 
+export const STRATEGY_VALIDATION = {
+  MIN_PERCENTAGE: 1,    // 1%
+  MAX_PERCENTAGE: 50,   // 50%
+  MIN_BASIS_POINTS: 100,    // 1% in basis points
+  MAX_BASIS_POINTS: 5000,   // 50% in basis points
+  DEFAULT_PERCENTAGE: 10,   // 10%
+  DEFAULT_MAX_PERCENTAGE: 25, // 25%
+} as const;
+
+export const SAVINGS_TOKEN_TYPE = {
+  OUTPUT: 0,
+  INPUT: 1, 
+  SPECIFIC: 2
+} as const;
+
+export type SavingsTokenType = typeof SAVINGS_TOKEN_TYPE[keyof typeof SAVINGS_TOKEN_TYPE];
+
 // Get contract instances
 export const getContracts = (chain: Chain = base) => {
   return {

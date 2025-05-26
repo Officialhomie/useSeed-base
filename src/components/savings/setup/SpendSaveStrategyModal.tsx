@@ -5,13 +5,8 @@ import { parseUnits, Address } from 'viem';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 import toast from 'react-hot-toast';
 import SavingStrategyABI from '@/abi/savings/SavingStrategy.json'
+import { SAVINGS_TOKEN_TYPES, SavingsTokenType } from '@/lib/constants/savingsTypes';
 
-// Define SavingsTokenType enum to match contract
-enum SavingsTokenType {
-  OUTPUT = 0, 
-  INPUT = 1,     
-  SPECIFIC = 2   
-}
 // Token options
 const TOKEN_OPTIONS = [
   { value: CONTRACT_ADDRESSES.ETH, label: "ETH" },
@@ -63,7 +58,7 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
       autoIncrement: 0,
       maxPercentage: 25,
       roundUpSavings: true,
-      savingsTokenType: SavingsTokenType.INPUT,
+      savingsTokenType: SAVINGS_TOKEN_TYPES.INPUT,
       specificToken: CONTRACT_ADDRESSES.ETH,
       enableDCA: false,
       dcaTargetToken: CONTRACT_ADDRESSES.ETH,
@@ -81,15 +76,14 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
   // Add validation to ensure strategy values are always numbers
   useEffect(() => {
     if (strategy) {
-      // Validate and correct any NaN values
       const validatedStrategy = {
         ...strategy,
-        percentage: Number.isNaN(strategy.percentage) ? 10 : strategy.percentage,
-        autoIncrement: Number.isNaN(strategy.autoIncrement) ? 0 : strategy.autoIncrement,
-        maxPercentage: Number.isNaN(strategy.maxPercentage) ? 25 : strategy.maxPercentage,
+        percentage: Number.isNaN(strategy.percentage) || strategy.percentage < 1 ? 10 : strategy.percentage,
+        autoIncrement: Number.isNaN(strategy.autoIncrement) || strategy.autoIncrement < 0 ? 0 : strategy.autoIncrement,
+        maxPercentage: Number.isNaN(strategy.maxPercentage) || strategy.maxPercentage < strategy.percentage ? 
+          Math.max(25, strategy.percentage || 10) : strategy.maxPercentage,
       };
       
-      // Update if there were any corrections
       if (validatedStrategy.percentage !== strategy.percentage ||
           validatedStrategy.autoIncrement !== strategy.autoIncrement ||
           validatedStrategy.maxPercentage !== strategy.maxPercentage) {
@@ -192,19 +186,38 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
       }, 1000);
     }
   }, [isPending, isConfirming, isSuccess, onComplete, onClose]);
+
+
   const handleSubmit = async () => {
     if (!address) return;
     
     try {
       // Helper function to ensure we never pass NaN to BigInt
       const safeBigInt = (value: number): bigint => {
-        // If value is NaN or not an integer, use a default value
         if (Number.isNaN(value) || !Number.isInteger(value)) {
-          console.warn(`Attempted to convert invalid value to BigInt: ${value}. Using default.`);
+          console.warn(`Invalid value for BigInt: ${value}. Using default.`);
           return BigInt(0);
         }
         return BigInt(value);
       };
+
+      if (strategy.percentage < 1) {
+        throw new Error("Savings percentage must be at least 1%");
+      }
+      
+      if (strategy.percentage > 50) {
+        throw new Error("Savings percentage cannot exceed 50%");
+      }
+      
+      if (strategy.maxPercentage < strategy.percentage) {
+        throw new Error("Maximum percentage must be greater than or equal to current percentage");
+      }
+      
+      if (strategy.savingsTokenType === SAVINGS_TOKEN_TYPES.SPECIFIC) {
+        if (!strategy.specificToken || strategy.specificToken === "0x0000000000000000000000000000000000000000") {
+          throw new Error("Please select a specific token for your savings");
+        }
+      }
 
       // Convert percentage values to basis points for contract (e.g., 10% becomes 1000)
       // Add validation to ensure values are numbers and provide fallbacks for NaN
@@ -239,7 +252,7 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
           safeBigInt(maxPercentageBasisPoints),
           strategy.roundUpSavings,
           Number(strategy.savingsTokenType),
-          strategy.savingsTokenType === SavingsTokenType.SPECIFIC 
+          strategy.savingsTokenType === SAVINGS_TOKEN_TYPES.SPECIFIC 
             ? strategy.specificToken
             : "0x0000000000000000000000000000000000000000" as Address
         ]
@@ -436,29 +449,29 @@ const SpendSaveStrategyModal: React.FC<SpendSaveStrategyModalProps> = ({
               </label>
               <div className="grid grid-cols-3 gap-3">
                 <div 
-                  className={`border ${strategy.savingsTokenType === SavingsTokenType.INPUT ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'} rounded-lg p-3 cursor-pointer text-center`}
-                  onClick={() => setStrategy({...strategy, savingsTokenType: SavingsTokenType.INPUT})}
+                  className={`border ${strategy.savingsTokenType === SAVINGS_TOKEN_TYPES.INPUT ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'} rounded-lg p-3 cursor-pointer text-center`}
+                  onClick={() => setStrategy({...strategy, savingsTokenType: SAVINGS_TOKEN_TYPES.INPUT})}
                 >
                   <div className="text-sm font-medium">Input Token</div>
                   <div className="text-xs text-gray-400 mt-1">Save part of what you spend</div>
                 </div>
                 <div 
-                  className={`border ${strategy.savingsTokenType === SavingsTokenType.OUTPUT ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'} rounded-lg p-3 cursor-pointer text-center`}
-                  onClick={() => setStrategy({...strategy, savingsTokenType: SavingsTokenType.OUTPUT})}
+                  className={`border ${strategy.savingsTokenType === SAVINGS_TOKEN_TYPES.OUTPUT ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'} rounded-lg p-3 cursor-pointer text-center`}
+                  onClick={() => setStrategy({...strategy, savingsTokenType: SAVINGS_TOKEN_TYPES.OUTPUT})}
                 >
                   <div className="text-sm font-medium">Output Token</div>
                   <div className="text-xs text-gray-400 mt-1">Save part of what you receive</div>
                 </div>
                 <div 
-                  className={`border ${strategy.savingsTokenType === SavingsTokenType.SPECIFIC ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'} rounded-lg p-3 cursor-pointer text-center`}
-                  onClick={() => setStrategy({...strategy, savingsTokenType: SavingsTokenType.SPECIFIC})}
+                  className={`border ${strategy.savingsTokenType === SAVINGS_TOKEN_TYPES.SPECIFIC ? 'border-blue-500 bg-blue-500/10' : 'border-gray-700'} rounded-lg p-3 cursor-pointer text-center`}
+                  onClick={() => setStrategy({...strategy, savingsTokenType: SAVINGS_TOKEN_TYPES.SPECIFIC})}
                 >
                   <div className="text-sm font-medium">Specific Token</div>
                   <div className="text-xs text-gray-400 mt-1">Always save in one token</div>
                 </div>
               </div>
               
-              {strategy.savingsTokenType === SavingsTokenType.SPECIFIC && (
+              {strategy.savingsTokenType === SAVINGS_TOKEN_TYPES.SPECIFIC && (
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-400 mb-2">
                     Specific token to save

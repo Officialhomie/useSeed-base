@@ -2,6 +2,7 @@ import { parseUnits, formatUnits } from 'viem';
 import { SpendSaveStrategy } from '../hooks/useSpendSaveStrategy';
 
 // Calculate the amount to save based on the strategy and input amount
+// ✅ ENHANCE: calculateSavingsAmount with validation
 export function calculateSavingsAmount(
   inputAmount: string,
   strategy: SpendSaveStrategy,
@@ -17,18 +18,25 @@ export function calculateSavingsAmount(
     return '0';
   }
   
-  // Use override percentage if provided, otherwise use the strategy percentage
   const percentage = overridePercentage !== null 
     ? overridePercentage 
-    : (strategy.currentPercentage / 100); // Convert basis points to percentage
+    : (strategy.currentPercentage / 100);
+    
+  if (percentage < 0.01 || percentage > 50) {
+    console.warn(`Invalid savings percentage: ${percentage}%. Using fallback.`);
+    return '0';
+  }
   
-  // Calculate the savings amount
   const amountFloat = parseFloat(inputAmount);
   const savingsAmountFloat = amountFloat * (percentage / 100);
   
-  // Round up if needed
+  if (savingsAmountFloat > amountFloat * 0.5) {
+    console.warn(`Savings amount (${savingsAmountFloat}) exceeds 50% of input. Capping at 50%.`);
+    return (amountFloat * 0.5).toFixed(6);
+  }
+  
   const finalSavingsAmount = strategy.roundUpSavings 
-    ? Math.ceil(savingsAmountFloat * 10**6) / 10**6 // Round up to 6 decimal places
+    ? Math.ceil(savingsAmountFloat * 10**6) / 10**6
     : savingsAmountFloat;
     
   return finalSavingsAmount.toFixed(6);
