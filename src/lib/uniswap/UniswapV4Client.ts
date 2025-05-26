@@ -81,8 +81,8 @@ export const UNISWAP_V4_CONSTANTS = {
 // ===== 6. Fix Savings Token Type Constants =====
 
 export const SAVINGS_TOKEN_TYPES = {
-  INPUT_TOKEN: 0,
-  OUTPUT_TOKEN: 1,
+  OUTPUT_TOKEN: 0,
+  INPUT_TOKEN: 1,
   SPECIFIC_TOKEN: 2,
 } as const;
 
