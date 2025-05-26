@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { Address } from 'viem';
 import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import useSwapWithSavings from '@/lib/hooks/useSwapWithSavings';
 import useDCAManagement from '@/lib/hooks/useDCAManagement';
@@ -15,10 +14,8 @@ import SpendSaveEventListeners from '@/components/wallet/SpendSaveEventListeners
 import { useNotification } from '@/components/core/NotificationManager';
 import TokenSelector from '@/components/tokens/TokenSelector';
 import { TokenPriceDisplay } from '@/components/tokens/TokenPriceDisplay';
-import SwapWithSavingsGasInfo from '@/components/trading/swap/SwapWithSavingsGasInfo';
 import SpendSaveStrategyModal from '@/components/savings/setup/SpendSaveStrategyModal';
 import SavingsRatioIndicator from '@/components/savings/visualisation/SavingsRatioIndicator';
-import { GasPriceCategory } from '@/lib/hooks/useGasPrice';
 import { cn } from '@/lib/utils';
 import SavingsSummary from '@/components/savings/overview/SavingsSummary';
 import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
@@ -28,8 +25,18 @@ import {
   ApprovalStatusBanner, 
   ApprovalManager, 
   ApprovalProgress, 
-  CompactApprovalStatus 
 } from '@/components/tokens/TokenApprovalComponents';
+
+// ========== Network Validation Hook (placeholder) ==========
+function useNetworkValidation() {
+  const validateNetworkOrThrow = useCallback(() => {
+    // Network validation logic would go here
+    // For now, just a placeholder
+    console.log('Network validation check');
+  }, []);
+
+  return { validateNetworkOrThrow };
+}
 
 // ========== PHASE 2: Strategy Setup Modal Component ==========
 const StrategySetupModal = ({ 
@@ -281,7 +288,8 @@ export default function SwapWithSavings() {
   const { addNotification } = useNotification();
   const { tokens, isLoading: isLoadingTokens } = useTokenList();
   const { strategy, isLoading: isLoadingStrategy } = useSpendSaveStrategy();
-  const { tokenBalances, isLoading: isLoadingBalances } = useTokenBalances();
+  const { tokenBalances } = useTokenBalances();
+  const { validateNetworkOrThrow } = useNetworkValidation();
   
   // Token state
   const [fromToken, setFromToken] = useState<Token | null>(null);
@@ -303,17 +311,10 @@ export default function SwapWithSavings() {
   const { 
     dcaEnabled, 
     dcaTargetToken,
-    enableDCA,
-    disableDCA,
-    executeQueuedDCAs
   } = useDCAManagement();
 
   // Add state for validation error
   const [validationError, setValidationError] = useState<string | null>(null);
-  
-  // New state for gas price
-  const [selectedGasPrice, setSelectedGasPrice] = useState<GasPriceCategory>('standard');
-  const [customGasPrice, setCustomGasPrice] = useState<number | null>(null);
   
   // Memoize swap parameters to prevent unnecessary re-renders and API calls
   const swapParams = useMemo(() => {
@@ -327,8 +328,6 @@ export default function SwapWithSavings() {
       strategy,
       overridePercentage,
       disableSavings: disableSavingsForThisSwap,
-      customGasPrice: customGasPrice,
-      gasPriceCategory: selectedGasPrice
     };
   }, [
     fromToken?.symbol, 
@@ -339,11 +338,9 @@ export default function SwapWithSavings() {
     strategy.isConfigured && !disableSavingsForThisSwap ? strategy.currentPercentage : 0,
     overridePercentage,
     disableSavingsForThisSwap,
-    customGasPrice,
-    selectedGasPrice
   ]);
   
-  // Use the swap with savings hook with memoized parameters (REMOVED estimatedOutput)
+  // Use the swap with savings hook with memoized parameters
   const { 
     executionStatus,
     savedAmount,
@@ -352,11 +349,7 @@ export default function SwapWithSavings() {
     isLoading: isSwapping,
     isSuccess,
     transactionHash,
-    usingFallbackGas,
     error,
-    gasEstimate,
-    sizeCategory,
-    estimatedGasLimit,
     savingsPreview,
     // ========== PHASE 2: New strategy-related properties ==========
     strategyValidation,
@@ -391,9 +384,6 @@ export default function SwapWithSavings() {
     clearDCAResults
   } = useSwapWithSavings(swapParams);
   
-  // REMOVED: The useEffect that was trying to use estimatedOutput since we don't have quotes anymore
-  // The toAmount field will now remain as a read-only placeholder
-  
   // Get actual swap amount function for SavingsSummary
   const getActualSwapAmount = useCallback(() => {
     return actualSwapAmount || fromAmount;
@@ -421,34 +411,7 @@ export default function SwapWithSavings() {
     setToAmount("");
   };
   
-  // Handle gas price selection from the selector
-  const handleGasPriceSelect = (category: GasPriceCategory, price: number) => {
-    setSelectedGasPrice(category);
-    setCustomGasPrice(price);
-  };
-  
-  // Calculate gas buffer using the dynamic gas estimator instead of hardcoded value
-  const calculateGasBuffer = (): number => {
-    // Base estimate on transaction size category
-    const bufferMap: {[key: string]: number} = {
-      'MICRO': 0.0004, // ~$1 at $2500/ETH
-      'SMALL': 0.0006, // ~$1.50 at $2500/ETH
-      'MEDIUM': 0.0008, // ~$2 at $2500/ETH
-      'LARGE': 0.001 // ~$2.50 at $2500/ETH
-    };
-    
-    // Default to medium if sizeCategory not available yet
-    const bufferAmount = bufferMap[sizeCategory || 'MEDIUM'];
-    
-    // Add 20% to buffer if customGasPrice is higher than standard
-    if (customGasPrice && customGasPrice > 50) { // High gas price threshold
-      return bufferAmount * 1.2;
-    }
-    
-    return bufferAmount;
-  };
-  
-  // Find and update handleMaxClick function
+  // Handle MAX button click
   const handleMaxClick = () => {
     if (!fromToken || !tokenBalances) return;
     
@@ -458,21 +421,20 @@ export default function SwapWithSavings() {
       if (fromToken.symbol === 'ETH') {
         const ethBalance = parseFloat(tokenBalances.ETH.formattedBalance);
         
-        // Fixed gas buffer of 0.0005411 ETH (approximately $1)
-        const gasBuffer = calculateGasBuffer();
+        // Reserve a small amount for gas fees (0.001 ETH)
+        const gasReserve = 0.001;
         
         // Prevent negative values if balance is too small
-        maxAmount = Math.max(0, ethBalance - gasBuffer);
+        maxAmount = Math.max(0, ethBalance - gasReserve);
         
         // If balance is too small to support a transaction
-        if (ethBalance <= gasBuffer) {
-          // Show notification
+        if (ethBalance <= gasReserve) {
           addNotification({
             type: 'warning',
             title: 'Low ETH Balance',
-            message: `Your ETH balance (${ethBalance.toFixed(4)} ETH) is too low to swap. Keep $1 (0.0005411 ETH) for gas fees.`
+            message: `Your ETH balance (${ethBalance.toFixed(4)} ETH) is too low to swap. Keep some ETH for gas fees.`
           });
-          return; // Exit early
+          return;
         }
       } else {
         // For non-ETH tokens, use full balance
@@ -518,9 +480,9 @@ export default function SwapWithSavings() {
       }
       // For ETH, also check if we're leaving enough for gas
       else if (fromToken.symbol === 'ETH') {
-        const gasBuffer = calculateGasBuffer();
-        if (amount > balance - gasBuffer) {
-          setValidationError(`Leave $1 (${0.0005411} ETH) for gas fees`);
+        const gasReserve = 0.001;
+        if (amount > balance - gasReserve) {
+          setValidationError(`Leave some ETH for gas fees`);
         }
       }
     }
@@ -544,28 +506,6 @@ export default function SwapWithSavings() {
   // Handle slippage change
   const handleSlippageChange = (value: string) => {
     setSlippage(value);
-  };
-  
-  // Validate amount before swap
-  const validateSwapAmount = (amount: string, balance: string, isEth: boolean, gasBuffer: number): string | null => {
-    if (!amount || !balance) return null;
-    
-    const amountValue = parseFloat(amount);
-    const balanceValue = parseFloat(balance);
-    
-    if (isNaN(amountValue) || isNaN(balanceValue)) return null;
-    
-    // Check if amount exceeds balance
-    if (amountValue > balanceValue) {
-      return `Insufficient balance`;
-    }
-    
-    // For ETH, check if we're leaving enough for gas
-    if (isEth && amountValue > balanceValue - gasBuffer) {
-      return `Leave ~${gasBuffer.toFixed(4)} ETH for gas fees`;
-    }
-    
-    return null;
   };
   
   // ========== PHASE 2: Strategy Setup Handler ==========
@@ -690,17 +630,17 @@ export default function SwapWithSavings() {
         return;
       }
       
-      // ETH balance validation with gas buffer
+      // ETH balance validation
       if (fromToken?.symbol === 'ETH' && tokenBalances) {
         const amount = parseFloat(fromAmount);
         const balance = parseFloat(tokenBalances.ETH.formattedBalance);
-        const gasBuffer = calculateGasBuffer();
+        const gasReserve = 0.001;
         
-        if (amount > balance - gasBuffer) {
+        if (amount > balance - gasReserve) {
           addNotification({
             type: 'error',
             title: 'Insufficient Balance',
-            message: 'You need to leave $1 (0.0005411 ETH) for gas fees. Try using a smaller amount or the MAX button.'
+            message: 'You need to leave some ETH for gas fees. Try using a smaller amount or the MAX button.'
           });
           return;
         }
@@ -806,7 +746,8 @@ export default function SwapWithSavings() {
       addNotification({
         type: 'success',
         title: 'DCA Processing Complete',
-        message: `Successfully processed ${successCount} DCA swap${successCount !== 1 ? 's' : ''}`,      });
+        message: `Successfully processed ${successCount} DCA swap${successCount !== 1 ? 's' : ''}`,
+      });
     } else {
       addNotification({
         type: 'warning',
@@ -1012,24 +953,16 @@ export default function SwapWithSavings() {
               approvalState={approvalState}
               token={fromToken?.symbol || ''}
               amount={fromAmount}
-              onApprovePoolManager={async () => {
-                // This would call the individual approval function
-                return await handleApproveAll();
-              }}
-              onApproveHook={async () => {
-                // This would call the individual approval function  
-                return await handleApproveAll();
-              }}
-              onApproveAll={async () => {
-                return await handleApproveAll();
-              }}
+              onApprovePoolManager={handleApproveAll}
+              onApproveHook={handleApproveAll}
+              onApproveAll={handleApproveAll}
               onRefresh={handleRefreshApprovals}
               enabled={!disableSavingsForThisSwap && fromToken?.symbol !== 'ETH'}
             />
           </div>
         )}
         
-        {/* From Token Input Field - Let's add the balance display and MAX button here */}
+        {/* From Token Input Field */}
         <div className="bg-gray-800 rounded-xl p-3 sm:p-4 mb-2">
           <div className="flex flex-wrap justify-between items-center mb-2">
             <label className="text-xs sm:text-sm text-gray-400">From</label>
@@ -1085,7 +1018,7 @@ export default function SwapWithSavings() {
           </button>
         </div>
         
-        {/* To Token Input Field - Now shows as placeholder since we don't have quotes */}
+        {/* To Token Input Field */}
         <div className="bg-gray-800 rounded-xl p-3 sm:p-4 mb-4">
           <div className="flex flex-wrap justify-between items-center mb-2">
             <label className="text-xs sm:text-sm text-gray-400">To</label>
@@ -1148,17 +1081,6 @@ export default function SwapWithSavings() {
                 }</span>
               </div>
             )}
-          </div>
-        )}
-        
-        {/* Below the swap button, add the gas info component */}
-        {fromToken && fromToken.symbol === 'ETH' && fromAmount && parseFloat(fromAmount) > 0 && (
-          <div className="mt-4">
-            <SwapWithSavingsGasInfo 
-              gasLimit={estimatedGasLimit || 250000}
-              onGasPriceSelect={handleGasPriceSelect}
-              className="mt-4"
-            />
           </div>
         )}
         
@@ -1427,13 +1349,9 @@ export default function SwapWithSavings() {
           slippage={slippage}
           dcaEnabled={dcaEnabled}
           dcaTargetToken={dcaTargetToken ? dcaTargetToken.toString() : undefined}
-          gasEstimate={gasEstimate || '0'}
-          gasPriceGwei={customGasPrice ? customGasPrice.toString() : '30'}
-          gasPriceCategory={selectedGasPrice}
           savedAmount={savedAmount || '0'}
           actualSwapAmount={actualSwapAmount || '0'}
           isLoading={isSwapping}
-          usingFallbackGas={usingFallbackGas}
         />
       )}
       
@@ -1464,8 +1382,4 @@ export default function SwapWithSavings() {
       />
     </>
   );
-}
-
-function validateNetworkOrThrow() {
-  throw new Error('Function not implemented.');
 }
