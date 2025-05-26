@@ -640,64 +640,82 @@ export default function SwapWithSavings() {
 
   // ========== PHASE 2: Enhanced Swap Button Handler ==========
   const handleSwapClick = () => {
-    if (!isConnected || !fromAmount || parseFloat(fromAmount) <= 0) return;
-    
-    // PHASE 2: Check if strategy validation passed
-    if (!canExecuteSwap) {
-      if (strategySetupRequired) {
+    try {
+      validateNetworkOrThrow();
+      
+      // Early validation - check connection and amount
+      if (!isConnected || !fromAmount || parseFloat(fromAmount) <= 0) {
+        return;
+      }
+      
+      // PHASE 2: Check if strategy validation passed
+      if (!canExecuteSwap) {
+        // Strategy setup required
+        if (strategySetupRequired) {
+          addNotification({
+            type: 'warning',
+            title: 'Strategy Setup Required',
+            message: 'Please set up your savings strategy before swapping.'
+          });
+          setShowStrategySetupModal(true);
+          return;
+        }
+        
+        // Strategy validation errors
+        if (strategyValidation.errors.length > 0) {
+          addNotification({
+            type: 'error',
+            title: 'Strategy Validation Failed',
+            message: strategyValidation.errors[0]
+          });
+          return;
+        }
+        
+        // PHASE 3: Check approval status
+        if (needsApprovals && !canProceedWithApprovals) {
+          addNotification({
+            type: 'warning',
+            title: 'Token Approvals Required',
+            message: 'Please approve tokens for swapping and savings functionality.'
+          });
+          return;
+        }
+        
+        // Default case - validation in progress
         addNotification({
           type: 'warning',
-          title: 'Strategy Setup Required',
-          message: 'Please set up your savings strategy before swapping.'
-        });
-        setShowStrategySetupModal(true);
-        return;
-      }
-      
-      if (strategyValidation.errors.length > 0) {
-        addNotification({
-          type: 'error',
-          title: 'Strategy Validation Failed',
-          message: strategyValidation.errors[0]
+          title: 'Cannot Execute Swap',
+          message: 'Strategy validation in progress. Please wait.'
         });
         return;
       }
       
-      // PHASE 3: Check approval status
-      if (needsApprovals && !canProceedWithApprovals) {
-        addNotification({
-          type: 'warning',
-          title: 'Token Approvals Required',
-          message: 'Please approve tokens for swapping and savings functionality.'
-        });
-        return;
+      // ETH balance validation with gas buffer
+      if (fromToken?.symbol === 'ETH' && tokenBalances) {
+        const amount = parseFloat(fromAmount);
+        const balance = parseFloat(tokenBalances.ETH.formattedBalance);
+        const gasBuffer = calculateGasBuffer();
+        
+        if (amount > balance - gasBuffer) {
+          addNotification({
+            type: 'error',
+            title: 'Insufficient Balance',
+            message: 'You need to leave $1 (0.0005411 ETH) for gas fees. Try using a smaller amount or the MAX button.'
+          });
+          return;
+        }
       }
       
+      // All validations passed - show confirmation
+      setShowConfirmation(true);
+      
+    } catch (error) {
       addNotification({
-        type: 'warning',
-        title: 'Cannot Execute Swap',
-        message: 'Strategy validation in progress. Please wait.'
+        type: 'error',
+        title: 'Network Error',
+        message: error instanceof Error ? error.message : 'An unknown error occurred'
       });
-      return;
     }
-    
-    // Original validation
-    if (fromToken && fromToken.symbol === 'ETH' && tokenBalances) {
-      const amount = parseFloat(fromAmount);
-      const balance = parseFloat(tokenBalances.ETH.formattedBalance);
-      const gasBuffer = calculateGasBuffer();
-      
-      if (amount > balance - gasBuffer) {
-        addNotification({
-          type: 'error',
-          title: 'Insufficient Balance',
-          message: 'You need to leave $1 (0.0005411 ETH) for gas fees. Try using a smaller amount or the MAX button.'
-        });
-        return;
-      }
-    }
-    
-    setShowConfirmation(true);
   };
 
   // Handle confirmation
@@ -1446,4 +1464,8 @@ export default function SwapWithSavings() {
       />
     </>
   );
+}
+
+function validateNetworkOrThrow() {
+  throw new Error('Function not implemented.');
 }

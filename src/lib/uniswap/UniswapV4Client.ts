@@ -229,6 +229,22 @@ export class UniswapV4Client {
     }
   }
 
+  async validateNetworkOrThrow(): Promise<void> {
+    try {
+      const network = await this.provider.getNetwork();
+      const chainId = network.chainId;
+      
+      if (chainId !== 8453) {
+        throw new Error(`Wrong network: Connected to ${network.name} (${chainId}). Please switch to Base mainnet (8453).`);
+      }
+      
+      console.log('✅ Network validation passed: Base mainnet');
+    } catch (error) {
+      console.error('❌ Network validation failed:', error);
+      throw error;
+    }
+  }
+
   async validateContractDeployments(): Promise<{
     isValid: boolean;
     errors: string[];
@@ -472,25 +488,17 @@ export class UniswapV4Client {
    */
   async init(userAddress?: string): Promise<void> {
     try {
-      // First ensure network is available
-      if (this.networkStatus !== 'connected') {
-        try {
-          await this.detectNetwork();
-        } catch (networkErr) {
-          console.error('Network detection failed during initialization');
-        }
-      }
-
-      // Validate all contracts before proceeding
+      // Validate network first
+      await this.validateNetworkOrThrow();
+      
+      // Continue with existing initialization...
       const contractsValid = await this.validateAllContracts();
       if (!contractsValid) {
         throw new Error('Contract validation failed - cannot proceed with initialization');
       }
-
-      // Get ETH price from BaseScan API
+  
       this.ethPriceInUsd = await this.getEthPrice();
       
-      // Set user address
       if (userAddress) {
         this.userAddress = userAddress;
       } else if (this.signer) {
@@ -498,10 +506,9 @@ export class UniswapV4Client {
       }
       
       this.isInitialized = true;
-      console.log('✅ UniswapV4Client initialized successfully with contract validation');
+      console.log('✅ UniswapV4Client initialized successfully');
     } catch (error) {
       console.error("Failed to initialize UniswapV4Client:", error);
-      this.isInitialized = true; // Mark as initialized to prevent retries
       throw error;
     }
   }

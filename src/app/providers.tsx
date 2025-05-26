@@ -1,12 +1,117 @@
 "use client";
 
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode, useEffect } from "react";
-import { WagmiProvider } from "wagmi";
+import { useState, type ReactNode, useEffect, useCallback } from "react";
+import { useSwitchChain, useAccount, useChainId, WagmiProvider } from "wagmi";
 import { config } from "../../wagmi";
 import NotificationProvider from '@/components/core/NotificationManager';
 import { OnchainKitProvider } from '@coinbase/onchainkit';
 import { base } from 'wagmi/chains';
+
+// Network Switch Modal Component
+const NetworkSwitchModal = ({ 
+  isOpen, 
+  onClose, 
+  onSwitch, 
+  isSwitching 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSwitch: () => void;
+  isSwitching: boolean;
+}) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-gray-900 rounded-xl p-6 max-w-md mx-4 border border-gray-800">
+        <div className="flex items-center mb-4">
+          <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mr-4">
+            <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-bold text-white">Wrong Network</h3>
+        </div>
+        
+        <p className="text-gray-400 mb-6">
+          You're connected to the wrong network. SpendSave Protocol only works on Base mainnet. 
+          Please switch to Base to continue using the app.
+        </p>
+        
+        <div className="flex space-x-4">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSwitch}
+            disabled={isSwitching}
+            className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+          >
+            {isSwitching ? (
+              <>
+                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                Switching...
+              </>
+            ) : (
+              'Switch to Base'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Network Validation Component
+const NetworkValidator = ({ children }: { children: React.ReactNode }) => {
+  const chainId = useChainId();
+  const { isConnected } = useAccount();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
+  const [showNetworkModal, setShowNetworkModal] = useState(false);
+  
+  const isOnCorrectNetwork = chainId === base.id; // 8453
+  
+  // Check network when connected
+  useEffect(() => {
+    if (isConnected && !isOnCorrectNetwork) {
+      // Show modal after a short delay to ensure wallet connection is complete
+      const timer = setTimeout(() => {
+        setShowNetworkModal(true);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    } else if (isConnected && isOnCorrectNetwork) {
+      setShowNetworkModal(false);
+    }
+  }, [isConnected, isOnCorrectNetwork]);
+  
+  const handleSwitchNetwork = useCallback(async () => {
+    try {
+      await switchChain({ chainId: base.id });
+      setShowNetworkModal(false);
+    } catch (error) {
+      console.error('Failed to switch network:', error);
+      // The modal will stay open so user can try again
+    }
+  }, [switchChain]);
+  
+  return (
+    <>
+      {children}
+      <NetworkSwitchModal
+        isOpen={showNetworkModal}
+        onClose={() => setShowNetworkModal(false)}
+        onSwitch={handleSwitchNetwork}
+        isSwitching={isSwitching}
+      />
+    </>
+  );
+};
 
 // Non-blocking wallet connection indicator
 const WalletConnectionStatus = ({ status }: { status: 'connecting' | 'failed' | 'connected' | 'timeout' }): JSX.Element | null => {
@@ -137,14 +242,14 @@ const ErrorBoundary = ({
   return hasError ? <>{fallback}</> : <>{children}</>;
 };
 
-export function Providers({ children }: { children: ReactNode }): JSX.Element {
+export function Providers({ children }: { children: React.ReactNode }): JSX.Element {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: 1000 * 60 * 5,
         retry: 3,
         retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
-        refetchOnWindowFocus: false, // Disable refetching on window focus for better performance
+        refetchOnWindowFocus: false,
       },
       mutations: {
         retry: 2,
@@ -153,167 +258,27 @@ export function Providers({ children }: { children: ReactNode }): JSX.Element {
     },
   }));
 
-  const [walletStatus, setWalletStatus] = useState<'connecting' | 'failed' | 'connected' | 'timeout'>('connecting');
-  const [connectionAttempts, setConnectionAttempts] = useState(0);
-  
-  // Handle asset loading
-  useEffect(() => {
-    // Modified asset preloading that doesn't use link rel="preload"
-    // This avoids the "preloaded but not used" warnings
-    const loadAssets = () => {
-      try {
-        // Add the smart-wallet.css directly with the correct content
-        const createSmartWalletCSS = () => {
-          const style = document.createElement('style');
-          style.id = 'smart-wallet-css';
-          // Add minimal CSS needed for the wallet component
-          style.textContent = `
-            .smart-wallet-dropdown {
-              z-index: 100;
-              position: relative;
-            }
-            .smart-wallet-avatar {
-              border-radius: 50%;
-              overflow: hidden;
-            }
-            .smart-wallet-name {
-              font-weight: 600;
-            }
-            .smart-wallet-address {
-              font-family: monospace;
-              font-size: 0.85em;
-            }
-            .smart-wallet-balance {
-              font-size: 0.9em;
-            }
-          `;
-          return style;
-        };
-        
-        // Only add if it doesn't exist already
-        if (!document.getElementById('smart-wallet-css')) {
-          document.head.appendChild(createSmartWalletCSS());
-        }
-        
-        // For images, we'll preload them into the browser cache only if needed
-        const imageAssets = [
-          '/logo.png'  // Keep simple path
-        ];
-        
-        // Only preload images that aren't already in the DOM or cache
-        imageAssets.forEach(asset => {
-          const img = new Image();
-          img.src = asset;
-          img.style.display = 'none'; // Make sure it's not visible
-          img.onload = () => {
-            // Image loaded successfully (now in cache)
-            document.body.removeChild(img);
-          };
-          document.body.appendChild(img);
-        });
-      } catch (e) {
-        console.warn('Asset loading failed:', e);
-      }
-    };
-    
-    // Call asset loader after DOM is fully ready
-    if (document.readyState === 'complete') {
-      loadAssets();
-    } else {
-      window.addEventListener('load', loadAssets);
-      return () => window.removeEventListener('load', loadAssets);
-    }
-  }, []);
-
-  // Non-blocking wallet initialization with proper timeout
-  useEffect(() => {
-    // Setup timeout for wallet connection
-    const connectionTimeout = setTimeout(() => {
-      if (walletStatus === 'connecting') {
-        console.warn('Wallet connection taking longer than expected');
-        setWalletStatus('timeout');
-      }
-    }, 3000); // 3 seconds timeout for warning
-    
-    const initializeWallet = async () => {
-      try {
-        
-        // Simulate wallet initialization completion
-        // In production, this would be your actual wallet connection logic
-        setTimeout(() => {
-          setWalletStatus('connected');
-          console.log('Wallet initialized successfully');
-        }, 500); // Small delay just to simulate actual connection
-      } catch (error) {
-        console.error('Wallet initialization error:', error);
-        
-        // Increment attempt counter and retry if under max attempts
-        if (connectionAttempts < 2) {
-          setConnectionAttempts(prev => prev + 1);
-          setWalletStatus('connecting');
-        } else {
-          // Max retries reached, mark as failed but still show the UI
-          setWalletStatus('failed');
-          console.warn('Wallet connection failed after multiple attempts');
-        }
-      }
-    };
-    
-    // Only try to initialize if we've failed or are connecting
-    if (walletStatus === 'connecting' || walletStatus === 'failed') {
-      initializeWallet();
-    }
-    
-    // Track wallet connection status
-    const handleOnline = () => {
-      // When the browser comes back online, retry connection
-      if (walletStatus !== 'connected') {
-        setConnectionAttempts(0);
-        setWalletStatus('connecting');
-      }
-    };
-    
-    window.addEventListener('online', handleOnline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      clearTimeout(connectionTimeout);
-    };
-  }, [connectionAttempts, walletStatus]);
-
   return (
-    <ErrorBoundary fallback={
-      <div className="p-4 m-4 border border-red-500 rounded bg-red-50 text-red-900">
-        <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
-        <p>There was an error initializing the wallet connection. Please refresh the page or try again later.</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-        >
-          Refresh Page
-        </button>
-      </div>
-    }>
-      <OnchainKitProvider
-        apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY!}
-        chain={base}
-        config={{
-          appearance: {
-            name: 'Base Seeds Protocol',
-            mode: 'auto',
-            theme: 'default',
-          },
-        }}
-      >
-        <WagmiProvider config={config}>
-          <QueryClientProvider client={queryClient}>
-            <NotificationProvider>
-              <WalletConnectionStatus status={walletStatus} />
+    <OnchainKitProvider
+      apiKey={process.env.NEXT_PUBLIC_ONCHAINKIT_API_KEY!}
+      chain={base}
+      config={{
+        appearance: {
+          name: 'SpendSave Protocol',
+          mode: 'auto',
+          theme: 'default',
+        },
+      }}
+    >
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <NotificationProvider>
+            <NetworkValidator>
               {children}
-            </NotificationProvider>
-          </QueryClientProvider>
-        </WagmiProvider>
-      </OnchainKitProvider>
-    </ErrorBoundary>
+            </NetworkValidator>
+          </NotificationProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </OnchainKitProvider>
   );
-} 
+}
