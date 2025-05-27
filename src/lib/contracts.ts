@@ -249,22 +249,34 @@ function getPermissionIndex(permissionName: string): number {
   return permissionOrder.indexOf(permissionName);
 }
 
-export function getTickSpacingForFee(fee: number): number {
+function getTickSpacingForFee(fee: number): number {
   switch (fee) {
-    case 100:    return 1;   // 0.01%
-    case 500:    return 10;  // 0.05%  
-    case 3000:   return 60;  // 0.3%
-    case 10000:  return 200; // 1%
-    default:     return 60;  // Default to 0.3% spacing
+    case 100: return 1;     // 0.01%
+    case 500: return 10;    // 0.05%  
+    case 3000: return 60;   // 0.3%
+    case 10000: return 200; // 1%
+    default: return 60;     // Default to 0.3% spacing
   }
 }
 
-export function createDynamicPoolKey(
+export function createPoolKey(
   tokenA: Address,
   tokenB: Address,
   fee: number = 3000
-): any {
-  // Ensure tokens are in correct order
+): {
+  currency0: Address;
+  currency1: Address;
+  fee: number;
+  tickSpacing: number;
+  hooks: Address;
+} {
+  // Validate fee tier
+  if (!isValidFeeTier(fee)) {
+    console.warn(`Invalid fee tier ${fee}, using default 3000 (0.3%)`);
+    fee = 3000;
+  }
+
+  // Ensure tokens are in correct order (lexicographic)
   const [token0, token1] = tokenA.toLowerCase() < tokenB.toLowerCase() 
     ? [tokenA, tokenB] 
     : [tokenB, tokenA];
@@ -273,10 +285,16 @@ export function createDynamicPoolKey(
     currency0: token0,
     currency1: token1,
     fee: fee,
-    tickSpacing: getTickSpacingForFee(fee), // ✅ FIX: Dynamic tick spacing
+    tickSpacing: getTickSpacingForFee(fee),
     hooks: CONTRACT_ADDRESSES.SPEND_SAVE_HOOK
   };
 }
+
+function isValidFeeTier(fee: number): boolean {
+  const validFees = [100, 500, 3000, 10000];
+  return validFees.includes(fee);
+}
+
 
 /**
  * Validate hook address and log results

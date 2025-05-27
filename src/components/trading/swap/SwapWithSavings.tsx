@@ -438,7 +438,7 @@ export default function SwapWithSavings() {
       if (fromToken.symbol === 'ETH') {
         const ethBalance = parseFloat(tokenBalances.ETH.formattedBalance);
         
-        // Reserve a small amount for gas fees (0.001 ETH)
+        // Reserve a small amount for gas fees (0.0001 ETH)
         const gasReserve = 0.0001;
         
         // Prevent negative values if balance is too small
@@ -497,7 +497,7 @@ export default function SwapWithSavings() {
       }
       // For ETH, also check if we're leaving enough for gas
       else if (fromToken.symbol === 'ETH') {
-        const gasReserve = 0.001;
+        const gasReserve = 0.0001;
         if (amount > balance - gasReserve) {
           setValidationError(`Leave some ETH for gas fees`);
         }
@@ -651,7 +651,7 @@ export default function SwapWithSavings() {
       if (fromToken?.symbol === 'ETH' && tokenBalances) {
         const amount = parseFloat(fromAmount);
         const balance = parseFloat(tokenBalances.ETH.formattedBalance);
-        const gasReserve = 0.001;
+        const gasReserve = 0.0001;
         
         if (amount > balance - gasReserve) {
           addNotification({

@@ -13,7 +13,7 @@ import {
   Token,
   TradeType,
 } from '@uniswap/sdk-core'
-import { CONTRACT_ADDRESSES, createDynamicPoolKey, validateHookPermissions } from '../contracts'
+import { CONTRACT_ADDRESSES, createPoolKey, validateHookPermissions } from '../contracts'
 import {
   CHAIN_ID,
   getTokenBySymbol,
@@ -1079,11 +1079,11 @@ export class UniswapV4Client {
       ? [tokenA.address, tokenB.address] 
       : [tokenB.address, tokenA.address];
     
-    const poolKey = createDynamicPoolKey(
-      getTokenBySymbol(fromToken).address as Address,
-      getTokenBySymbol(toToken).address as Address,
-      fee
-    );
+      const poolKey = createPoolKey(
+        getTokenBySymbol(fromToken).address as Address,
+        getTokenBySymbol(toToken).address as Address,
+        fee
+      );
 
     
 
