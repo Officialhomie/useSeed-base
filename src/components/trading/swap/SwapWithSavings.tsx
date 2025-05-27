@@ -18,6 +18,7 @@ import SpendSaveStrategyModal from '@/components/savings/setup/SpendSaveStrategy
 import SavingsRatioIndicator from '@/components/savings/visualisation/SavingsRatioIndicator';
 import { cn } from '@/lib/utils';
 import SavingsSummary from '@/components/savings/overview/SavingsSummary';
+
 import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 
@@ -38,6 +39,15 @@ function useNetworkValidation() {
 
   return { validateNetworkOrThrow };
 }
+
+const { 
+  dcaEnabled,
+  dcaTargetToken,
+  dcaQueueItems,
+  executeQueuedDCAs,
+  executeSpecificDCA,
+  refreshQueueData
+} = useDCAManagement();
 
 // ========== PHASE 2: Strategy Setup Modal Component ==========
 const StrategySetupModal = ({ 
@@ -384,7 +394,6 @@ export default function SwapWithSavings() {
     cleanupEventListeners,
     // ========== PHASE 4: DCA integration properties ==========
     dcaQueueStatus,
-    dcaQueueLength,
     dcaProcessingResults,
     isDcaProcessing,
     processDCAQueue,
@@ -1123,14 +1132,14 @@ export default function SwapWithSavings() {
         )}
 
         {/* PHASE 4: DCA Queue Status Display */}
-        {(strategy.enableDCA || dcaQueueLength > 0 || dcaQueueStatus !== 'idle') && (
+        {(strategy.enableDCA || dcaEnabled || dcaQueueItems.length > 0 || dcaQueueStatus !== 'idle') && (
           <div className="mt-4 p-3 rounded-lg text-sm bg-purple-900/20 border border-purple-800/40">
             <div className="flex items-center justify-between mb-2">
               <div className="font-medium text-purple-400">DCA Queue Status</div>
               <div className="flex items-center space-x-2">
-                {dcaQueueLength > 0 && (
+                {dcaQueueItems.length > 0 && (
                   <span className="text-xs bg-purple-800/40 text-purple-200 px-2 py-0.5 rounded">
-                    {dcaQueueLength} item{dcaQueueLength !== 1 ? 's' : ''}
+                    {dcaQueueItems.length} item{dcaQueueItems.length !== 1 ? 's' : ''}
                   </span>
                 )}
                 <span className={cn(
@@ -1143,8 +1152,79 @@ export default function SwapWithSavings() {
                 )}>
                   {dcaQueueStatus}
                 </span>
+                
+                {/* Refresh button */}
+                <button
+                  onClick={() => {
+                    // Call refreshQueueData from useDCAManagement
+                    refreshQueueData();
+                  }}
+                  disabled={isCheckingApprovals || isApprovingTokens}
+                  className="text-xs text-purple-400 hover:text-purple-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                  title="Refresh queue data"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none">
+                    <path d="M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
               </div>
             </div>
+
+            {/* DCA Target Token Display */}
+            {dcaTargetToken && (
+              <div className="mb-2 text-xs text-purple-300">
+                Target Token: {tokens.find(t => t.address === dcaTargetToken)?.symbol || 'Unknown'}
+              </div>
+            )}
+
+            {/* Current Queue Items */}
+            {dcaQueueItems && dcaQueueItems.length > 0 && (
+              <div className="mb-3">
+                <div className="text-xs text-purple-300 mb-1">Current Queue Items:</div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {dcaQueueItems.slice(0, 3).map((item, index) => {
+                    const fromTokenInfo = tokens.find(t => t.address === item.fromToken);
+                    const toTokenInfo = tokens.find(t => t.address === item.toToken);
+                    const isExpired = Number(item.deadline) * 1000 < Date.now();
+                    
+                    return (
+                      <div key={index} className="flex items-center justify-between text-xs bg-purple-900/30 p-2 rounded">
+                        <div className="flex items-center space-x-2">
+                          <span className={cn(
+                            "w-2 h-2 rounded-full",
+                            item.executed ? "bg-green-400" :
+                            isExpired ? "bg-red-400" :
+                            "bg-yellow-400 animate-pulse"
+                          )}></span>
+                          <span className="text-purple-200">
+                            {fromTokenInfo?.symbol} → {toTokenInfo?.symbol}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {(parseFloat(item.amount.toString()) / 1e18).toFixed(4)}
+                          </span>
+                          {!item.executed && !isExpired && (
+                            <button
+                              onClick={() => executeSpecificDCA(item.fromToken, item.amount, item.customSlippageTolerance)}
+                              disabled={isDcaProcessing}
+                              className="text-xs bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 text-white px-2 py-0.5 rounded"
+                            >
+                              Execute
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {dcaQueueItems.length > 3 && (
+                    <div className="text-xs text-gray-400 text-center">
+                      ... and {dcaQueueItems.length - 3} more items
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* DCA Processing Progress */}
             {isDcaProcessing && (
@@ -1153,14 +1233,17 @@ export default function SwapWithSavings() {
                   <div className="animate-spin w-3 h-3 border border-purple-400 border-t-transparent rounded-full mr-2"></div>
                   Processing DCA swaps...
                 </div>
+                <div className="w-full bg-purple-900/30 rounded-full h-1.5 mt-1">
+                  <div className="bg-purple-500 h-1.5 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                </div>
               </div>
             )}
 
             {/* DCA Processing Results */}
             {dcaProcessingResults.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-xs text-purple-300 mb-1">Processing Results:</div>
-                {dcaProcessingResults.map((result, index) => (
+              <div className="space-y-1 mb-3">
+                <div className="text-xs text-purple-300 mb-1">Recent Processing Results:</div>
+                {dcaProcessingResults.slice(-3).map((result, index) => (
                   <div key={index} className="flex items-center justify-between text-xs">
                     <div className="flex items-center">
                       <span className={cn(
@@ -1170,7 +1253,7 @@ export default function SwapWithSavings() {
                         "bg-red-400"
                       )}></span>
                       <span className="text-purple-300">
-                        Swap #{result.index}
+                        Item #{result.index}
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -1198,25 +1281,42 @@ export default function SwapWithSavings() {
               </div>
             )}
 
-            {/* Manual DCA Processing Button */}
-            {dcaQueueLength > 0 && dcaQueueStatus === 'idle' && !isDcaProcessing && (
-              <button
-                onClick={() => processDCAQueue().catch(console.error)}
-                className="mt-2 text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded"
-              >
-                Process DCA Queue
-              </button>
-            )}
+            {/* Control Buttons */}
+            <div className="flex space-x-2 mt-3">
+              {/* Manual DCA Processing Button */}
+              {dcaQueueItems.length > 0 && dcaQueueStatus === 'idle' && !isDcaProcessing && (
+                <button
+                  onClick={() => executeQueuedDCAs().catch(console.error)}
+                  disabled={isCheckingApprovals || isApprovingTokens}
+                  className="text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-1 rounded transition-colors"
+                >
+                  Process All DCA Queue
+                </button>
+              )}
 
-            {/* Clear Results Button */}
-            {dcaProcessingResults.length > 0 && dcaQueueStatus !== 'processing' && (
-              <button
-                onClick={clearDCAResults}
-                className="mt-2 ml-2 text-xs bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded"
-              >
-                Clear Results
-              </button>
-            )}
+              {/* Clear Results Button */}
+              {dcaProcessingResults.length > 0 && dcaQueueStatus !== 'processing' && (
+                <button
+                  onClick={clearDCAResults}
+                  className="text-xs bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded transition-colors"
+                >
+                  Clear Results
+                </button>
+              )}
+              
+              {/* View All Button */}
+              {dcaQueueItems.length > 0 && (
+                <button
+                  onClick={() => {
+                    // Navigate to DCA dashboard
+                    window.location.href = '/app-dashboard/dca';
+                  }}
+                  className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 border border-purple-600/30 rounded transition-colors"
+                >
+                  View All ({dcaQueueItems.length})
+                </button>
+              )}
+            </div>
           </div>
         )}
 

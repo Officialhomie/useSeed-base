@@ -4,6 +4,12 @@ import { Address, parseUnits, formatUnits } from 'viem';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { createPoolKey } from '../uniswap/UniswapV4Integration';
 
+interface DCAValidationError {
+  code: 'INSUFFICIENT_BALANCE' | 'INVALID_TOKEN' | 'NETWORK_ERROR' | 'VALIDATION_FAILED';
+  message: string;
+  details?: any;
+}
+
 interface DCAQueueItem {
   fromToken: Address;
   toToken: Address;
@@ -32,7 +38,14 @@ interface UseDCAManagementResult {
   executeQueuedDCAs: () => Promise<void>;
   executeSpecificDCA: (fromToken: Address, amount: bigint, customSlippageTolerance?: number) => Promise<void>;
   processTokenSwap: (fromToken: Address, toToken: Address, amount: bigint) => Promise<void>;
+  refreshQueueData: () => Promise<void>;
+  validateDCAParameters: (
+    tickDelta: number,
+    expiryTimeSeconds: number,
+    minTickImprovement: number
+  ) => DCAValidationError | null;
 }
+// 07031685998
 
 export default function useDCAManagement(): UseDCAManagementResult {
   const { address } = useAccount();
@@ -142,12 +155,31 @@ export default function useDCAManagement(): UseDCAManagementResult {
 
   // Enable DCA function
   const enableDCA = async (targetToken: Address) => {
-    if (!address) return;
+    if (!address) {
+      const error: DCAValidationError = {
+        code: 'VALIDATION_FAILED',
+        message: 'Wallet not connected'
+      };
+      setError(new Error(error.message));
+      return;
+    }
+    
+    // Validate target token
+    if (!targetToken || targetToken === '0x0000000000000000000000000000000000000000') {
+      const error: DCAValidationError = {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid target token address'
+      };
+      setError(new Error(error.message));
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
+      console.log(`Enabling DCA for user ${address} with target token ${targetToken}`);
+      
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESSES.DCA,
         abi: [
@@ -167,13 +199,82 @@ export default function useDCAManagement(): UseDCAManagementResult {
         args: [address, targetToken, true],
       });
       
+      console.log(`DCA enable transaction sent: ${hash}`);
+      
+      // Wait for confirmation
       await waitForTransaction(hash);
+      
+      console.log(`DCA enabled successfully for ${targetToken}`);
+      
+      // Refresh queue items after enabling
+      await fetchQueueItems();
+      
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to enable DCA'));
       console.error('Error enabling DCA:', err);
+      
+      let error: DCAValidationError;
+      
+      if (err instanceof Error) {
+        if (err.message.includes('insufficient funds')) {
+          error = {
+            code: 'INSUFFICIENT_BALANCE',
+            message: 'Insufficient ETH for gas fees',
+            details: err.message
+          };
+        } else if (err.message.includes('user rejected')) {
+          error = {
+            code: 'VALIDATION_FAILED',
+            message: 'Transaction rejected by user'
+          };
+        } else {
+          error = {
+            code: 'NETWORK_ERROR',
+            message: 'Network error occurred while enabling DCA',
+            details: err.message
+          };
+        }
+      } else {
+        error = {
+          code: 'NETWORK_ERROR',
+          message: 'Unknown error occurred',
+          details: String(err)
+        };
+      }
+      
+      setError(new Error(error.message));
     } finally {
       setIsLoading(false);
     }
+  };
+
+
+  const validateDCAParameters = (
+    tickDelta: number,
+    expiryTimeSeconds: number,
+    minTickImprovement: number
+  ): DCAValidationError | null => {
+    if (tickDelta < 0 || tickDelta > 1000) {
+      return {
+        code: 'VALIDATION_FAILED',
+        message: 'Tick delta must be between 0 and 1000'
+      };
+    }
+    
+    if (expiryTimeSeconds < 3600 || expiryTimeSeconds > 604800) { // 1 hour to 1 week
+      return {
+        code: 'VALIDATION_FAILED',
+        message: 'Expiry time must be between 1 hour and 1 week'
+      };
+    }
+    
+    if (minTickImprovement < 0 || minTickImprovement > 100) {
+      return {
+        code: 'VALIDATION_FAILED',
+        message: 'Minimum tick improvement must be between 0 and 100'
+      };
+    }
+    
+    return null;
   };
 
   // Disable DCA function
@@ -224,12 +325,30 @@ export default function useDCAManagement(): UseDCAManagementResult {
     minTickImprovement: number,
     dynamicSizing: boolean
   ) => {
-    if (!address) return;
+    if (!address) {
+      setError(new Error('Wallet not connected'));
+      return;
+    }
+    
+    // Validate parameters
+    const validationError = validateDCAParameters(tickDelta, expiryTimeSeconds, minTickImprovement);
+    if (validationError) {
+      setError(new Error(validationError.message));
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
     
     try {
+      console.log('Setting DCA tick strategy:', {
+        tickDelta,
+        expiryTimeSeconds,
+        onlyImprovePrice,
+        minTickImprovement,
+        dynamicSizing
+      });
+      
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESSES.DCA,
         abi: [
@@ -259,10 +378,13 @@ export default function useDCAManagement(): UseDCAManagementResult {
         ],
       });
       
+      console.log(`DCA tick strategy transaction sent: ${hash}`);
       await waitForTransaction(hash);
+      console.log('DCA tick strategy set successfully');
+      
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to set DCA tick strategy'));
       console.error('Error setting DCA tick strategy:', err);
+      setError(err instanceof Error ? err : new Error('Failed to set DCA tick strategy'));
     } finally {
       setIsLoading(false);
     }
@@ -316,6 +438,17 @@ export default function useDCAManagement(): UseDCAManagementResult {
       console.error('Error executing queued DCAs:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const refreshQueueData = async () => {
+    if (!address) return;
+    
+    try {
+      await fetchQueueItems();
+      console.log('DCA queue data refreshed successfully');
+    } catch (error) {
+      console.error('Failed to refresh DCA queue:', error);
     }
   };
 
@@ -424,6 +557,8 @@ export default function useDCAManagement(): UseDCAManagementResult {
     setDCATickStrategy,
     executeQueuedDCAs,
     executeSpecificDCA,
-    processTokenSwap
+    processTokenSwap,
+    refreshQueueData, 
+    validateDCAParameters, 
   };
 } 
