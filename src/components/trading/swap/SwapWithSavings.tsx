@@ -398,7 +398,14 @@ export default function SwapWithSavings() {
     isDcaProcessing,
     processDCAQueue,
     getDCAQueueInfo,
-    clearDCAResults
+    clearDCAResults,
+
+    // 🆕 V4-specific properties:
+    v4Quote,
+    v4ContractsValid,
+    v4QuoteAvailable,
+    v4GasOptimized,
+    estimatedGasSavings,
   } = useSwapWithSavings(swapParams);
   
   // Get actual swap amount function for SavingsSummary
@@ -1062,6 +1069,53 @@ export default function SwapWithSavings() {
             />
           </div>
         </div>
+
+        {/* 🆕 V4 Quote Display */}
+        {v4Quote && v4QuoteAvailable && (
+          <div className="mt-4 p-3 rounded-lg text-sm bg-purple-900/20 border border-purple-800/40">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium text-purple-400">V4 Quote Preview</div>
+              <div className="text-xs bg-purple-800/40 text-purple-200 px-2 py-0.5 rounded">
+                Uniswap V4
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Expected Output:</span>
+                <span className="text-white">{parseFloat(v4Quote.amountOut).toFixed(6)} {toToken?.symbol}</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Gas Estimate:</span>
+                <span className="text-green-400">{parseInt(v4Quote.gasEstimate).toLocaleString()}</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Price Impact:</span>
+                <span className={cn(
+                  "text-sm",
+                  v4Quote.priceImpact < 1 ? "text-green-400" :
+                  v4Quote.priceImpact < 3 ? "text-yellow-400" :
+                  "text-red-400"
+                )}>
+                  {v4Quote.priceImpact.toFixed(2)}%
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Route:</span>
+                <span className="text-purple-300 text-xs">{v4Quote.route}</span>
+              </div>
+            </div>
+
+            {estimatedGasSavings && (
+              <div className="mt-2 pt-2 border-t border-purple-800/40 text-xs text-green-400">
+                ⚡ Estimated gas savings: {estimatedGasSavings} vs Uniswap V3
+              </div>
+            )}
+          </div>
+        )}
         
         {/* Savings info if enabled */}
         {strategy.isConfigured && !disableSavingsForThisSwap && fromAmount && parseFloat(fromAmount) > 0 && (
@@ -1109,6 +1163,60 @@ export default function SwapWithSavings() {
             </div>
             <div className="text-xs text-blue-300 mt-1">
               Listening for savings processing and DCA events...
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced transaction status with V4 info */}
+        {transactionHash && (
+          <div className="mt-4 p-3 rounded-lg text-sm bg-blue-900/20 border border-blue-800/40">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium text-blue-400">V4 Transaction Status</div>
+              <div className="flex items-center space-x-2">
+                {v4GasOptimized && (
+                  <span className="text-xs bg-green-800/40 text-green-200 px-2 py-0.5 rounded">
+                    Gas Optimized
+                  </span>
+                )}
+                
+                <a
+                  href={`https://basescan.org/tx/${transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  <FiExternalLink size={14} />
+                </a>
+              </div>
+            </div>
+
+            {/* V4-specific status */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">V4 Contracts:</span>
+                <div className="flex items-center">
+                  {v4ContractsValid ? (
+                    <div className="flex items-center text-green-400">
+                      <FiCheckCircle className="mr-1" size={12} />
+                      <span className="text-xs">Validated</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-yellow-400">
+                      <FiClock className="mr-1 animate-pulse" size={12} />
+                      <span className="text-xs">Checking...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {v4GasOptimized && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Gas Optimization:</span>
+                  <div className="flex items-center text-green-400">
+                    <span className="text-xs">{estimatedGasSavings} vs V3</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
