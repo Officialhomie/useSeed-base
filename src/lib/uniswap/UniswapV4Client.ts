@@ -761,7 +761,7 @@ export class UniswapV4Client {
     );
   
     let status: 'inactive' | 'listening' | 'completed' | 'error' = 'inactive';
-    let eventsReceived: string[] = [];
+    const eventsReceived: string[] = []; 
     const eventListeners: Array<() => void> = [];
   
     const manager: EventListenerManager = {

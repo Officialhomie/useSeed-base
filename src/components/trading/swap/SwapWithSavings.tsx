@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccount } from 'wagmi';
-import { SpendSaveStrategy } from '@/lib/hooks/useSpendSaveStrategy';
 import useSwapWithSavings from '@/lib/hooks/useSwapWithSavings';
 import useDCAManagement from '@/lib/hooks/useDCAManagement';
 import useSpendSaveStrategy from '@/lib/hooks/useSpendSaveStrategy';
@@ -19,7 +18,6 @@ import SavingsRatioIndicator from '@/components/savings/visualisation/SavingsRat
 import { cn } from '@/lib/utils';
 import SavingsSummary from '@/components/savings/overview/SavingsSummary';
 
-import useSavingsPreview from '@/lib/hooks/useSavingsPreview';
 import { CONTRACT_ADDRESSES } from '@/lib/contracts';
 
 // ========== PHASE 3: Import Approval Components ==========
@@ -39,15 +37,6 @@ function useNetworkValidation() {
 
   return { validateNetworkOrThrow };
 }
-
-const { 
-  dcaEnabled,
-  dcaTargetToken,
-  dcaQueueItems,
-  executeQueuedDCAs,
-  executeSpecificDCA,
-  refreshQueueData
-} = useDCAManagement();
 
 // ========== PHASE 2: Strategy Setup Modal Component ==========
 const StrategySetupModal = ({ 
@@ -309,6 +298,16 @@ export default function SwapWithSavings() {
   const { tokenBalances } = useTokenBalances();
   const { validateNetworkOrThrow } = useNetworkValidation();
   
+  // ========== MOVE DCA MANAGEMENT HOOK INSIDE COMPONENT ==========
+  const { 
+    dcaEnabled,
+    dcaTargetToken,
+    dcaQueueItems,
+    executeQueuedDCAs,
+    executeSpecificDCA,
+    refreshQueueData
+  } = useDCAManagement();
+  
   // Token state
   const [fromToken, setFromToken] = useState<Token | null>(null);
   const [toToken, setToToken] = useState<Token | null>(null);
@@ -324,12 +323,6 @@ export default function SwapWithSavings() {
   // Savings customization
   const [disableSavingsForThisSwap, setDisableSavingsForThisSwap] = useState(false);
   const [overridePercentage, setOverridePercentage] = useState<number | null>(null);
-  
-  // DCA management
-  const { 
-    dcaEnabled, 
-    dcaTargetToken,
-  } = useDCAManagement();
 
   // Add state for validation error
   const [validationError, setValidationError] = useState<string | null>(null);

@@ -67,6 +67,17 @@ interface SwapExecutionResult {
   [key: string]: any;
 }
 
+// ✅ FIXED: Properly type DCA processing result item
+interface DCAProcessingResultItem {
+  index: number;
+  status: 'pending' | 'success' | 'failed';
+  txHash?: string;
+  error?: string;
+  fromToken: string;
+  toToken: string;
+  amount: string;
+}
+
 interface SwapWithSavingsResult {
   executionStatus: 'idle' | 'validating-strategy' | 'setting-strategy' | 'checking-approvals' | 'approving-tokens' | 'preparing' | 'pending' | 'success' | 'error';
   error: Error | null;
@@ -109,15 +120,7 @@ interface SwapWithSavingsResult {
   // PHASE 4: DCA integration features
   dcaQueueStatus: 'idle' | 'checking' | 'processing' | 'completed' | 'error';
   dcaQueueLength: number;
-  dcaProcessingResults: Array<{
-    index: number;
-    status: 'pending' | 'success' | 'failed';
-    txHash?: string;
-    error?: string;
-    fromToken: string;
-    toToken: string;
-    amount: string;
-  }>;
+  dcaProcessingResults: DCAProcessingResultItem[];
   isDcaProcessing: boolean;
   processDCAQueue: () => Promise<void>;
   getDCAQueueInfo: () => Promise<{length: number; items: any[]}>;
@@ -176,15 +179,7 @@ export default function useSwapWithSavings(
   // PHASE 4: DCA state management
   const [dcaQueueStatus, setDcaQueueStatus] = useState<'idle' | 'checking' | 'processing' | 'completed' | 'error'>('idle');
   const [dcaQueueLength, setDcaQueueLength] = useState<number>(0);
-  const [dcaProcessingResults, setDcaProcessingResults] = useState<Array<{
-    index: number;
-    status: 'pending' | 'success' | 'failed';
-    txHash?: string;
-    error?: string;
-    fromToken: string;
-    toToken: string;
-    amount: string;
-  }>>([]);
+  const [dcaProcessingResults, setDcaProcessingResults] = useState<DCAProcessingResultItem[]>([]);
   const [isDcaProcessing, setIsDcaProcessing] = useState(false);
 
   const [v4QuoteResult, setV4QuoteResult] = useState<{
@@ -441,7 +436,7 @@ export default function useSwapWithSavings(
       setDcaQueueStatus('processing');
 
       const dcaContract = await getDCAContract();
-      const results: typeof dcaProcessingResults = [];
+      const results: DCAProcessingResultItem[] = [];
 
       // Process each unexecuted item
       for (const item of items) {
@@ -456,15 +451,8 @@ export default function useSwapWithSavings(
           amount: item.amount
         });
 
-        const resultItem: {
-          index: number;
-          status: 'pending' | 'success' | 'failed';
-          txHash?: string;
-          error?: string;
-          fromToken: string;
-          toToken: string;
-          amount: string;
-        } = {
+        // ✅ FIXED: Properly type the result item as mutable
+        const resultItem: DCAProcessingResultItem = {
           index: item.index,
           status: 'pending',
           fromToken: item.fromToken,
@@ -496,7 +484,7 @@ export default function useSwapWithSavings(
           );
 
           console.log(`⏳ PHASE 4: DCA swap transaction sent: ${tx.hash}`);
-          resultItem.txHash = tx.hash; // Property 'txHash' does not exist on type '{ index: any; status: "pending"; fromToken: any; toToken: any; amount: any; }'.ts(2339)
+          resultItem.txHash = tx.hash; // ✅ FIXED: Now properly typed
           setDcaProcessingResults([...results]);
 
           // Wait for confirmation
@@ -504,7 +492,7 @@ export default function useSwapWithSavings(
           
           if (receipt.status === 1) {
             console.log(`✅ PHASE 4: DCA swap ${item.index} completed successfully`);
-            resultItem.status = 'success'; // Type '"success"' is not assignable to type '"pending"'.ts(2322)
+            resultItem.status = 'success'; // ✅ FIXED: Now properly typed
 
             
             // Mark as executed in storage
@@ -517,8 +505,8 @@ export default function useSwapWithSavings(
 
         } catch (error) {
           console.error(`❌ PHASE 4: DCA swap ${item.index} failed:`, error);
-          resultItem.status = 'failed'; // Type '"failed"' is not assignable to type '"pending"'.ts(2322)
-          resultItem.error = error instanceof Error ? error.message : String(error); // Property 'error' does not exist on type '{ index: any; status: "pending"; fromToken: any; toToken: any; amount: any; }'.ts(2339)
+          resultItem.status = 'failed'; 
+          resultItem.error = error instanceof Error ? error.message : String(error); // ✅ FIXED: Now properly typed
         }
 
         setDcaProcessingResults([...results]);
@@ -776,8 +764,7 @@ export default function useSwapWithSavings(
       throw new Error('Wallet not connected');
     }
 
-    setIsSettingUpStrategy(true);
-    setExecutionStatus('setting-strategy');
+    setIsSettingUpStrategy(true);     setExecutionStatus('setting-strategy');
 
     try {
       const strategyContract = await getSavingStrategyContract();

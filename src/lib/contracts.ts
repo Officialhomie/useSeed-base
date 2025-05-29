@@ -90,7 +90,7 @@ export async function validateHookPermissions(
   provider?: ethers.providers.Provider
 ): Promise<{ isValid: boolean; errors: string[]; details?: any }> {
   const errors: string[] = [];
-  let details: any = {};
+  const details: any = {}; 
 
   try {
     // Use provided provider or create a new one
@@ -535,4 +535,4 @@ export async function getSpenderWalletClient(chain: Chain = base) {
     account: spenderAccount,
     chain,
   };
-} 
+}
