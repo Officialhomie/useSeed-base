@@ -4,6 +4,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { spendPermissionManagerAbi, spendPermissionManagerAddress } from "./abi/SpendPermissionManager";
 import { ethers } from 'ethers';
 
+import { V4_CONTRACTS, BASE_TOKENS } from '@/lib/uniswap/v4Constants';
+
 
 // Contract addresses
 export const CONTRACT_ADDRESSES = {
@@ -23,12 +25,53 @@ export const CONTRACT_ADDRESSES = {
   UNISWAP_BASE_MAINNET_UNIVERSAL_ROUTER: "0x6ff5693b99212da76ad316178a184ab56d299b43" as Address,
   UNISWAP_BASE_MAINNET_QUOTER: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D" as Address,
 
+  V4_POOL_MANAGER: V4_CONTRACTS.POOL_MANAGER,
+  V4_POSITION_DESCRIPTOR: V4_CONTRACTS.POSITION_DESCRIPTOR,
+  V4_POSITION_MANAGER: V4_CONTRACTS.POSITION_MANAGER,
+  V4_QUOTER: V4_CONTRACTS.QUOTER,
+  V4_STATE_VIEW: V4_CONTRACTS.STATE_VIEW,
+  V4_UNIVERSAL_ROUTER: V4_CONTRACTS.UNIVERSAL_ROUTER,
+  V4_PERMIT2: V4_CONTRACTS.PERMIT2,
+
+  WETH: BASE_TOKENS.WETH,
+  USDC: BASE_TOKENS.USDC,
+  USDT: BASE_TOKENS.USDT,
+  DAI: BASE_TOKENS.DAI,
+
   // Common token addresses
   ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address, // ETH address stays the same
-  USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address, // Base Mainnet USDC
-  WETH: "0x4200000000000000000000000000000000000006" as Address, // Base Mainnet WETH (same as Sepolia)
-  DAI: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb" as Address, // Base Mainnet DAI
 } as const;
+
+export async function validateV4Deployment(
+  provider: ethers.providers.Provider
+): Promise<{
+  isValid: boolean;
+  errors: string[];
+  deployedContracts: string[];
+}> {
+  const errors: string[] = [];
+  const deployedContracts: string[] = [];
+  
+  for (const [name, address] of Object.entries(V4_CONTRACTS)) {
+    try {
+      const code = await provider.getCode(address);
+      if (code !== '0x' && code !== '0x0') {
+        deployedContracts.push(name);
+        console.log(`✅ ${name} validated at ${address}`);
+      } else {
+        errors.push(`❌ ${name} not deployed at ${address}`);
+      }
+    } catch (error) {
+      errors.push(`❌ Failed to validate ${name}: ${error}`);
+    }
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    deployedContracts
+  };
+}
 
 // Import ABIs
 import yieldModuleAbi from "@/abi/savings/YieldModule.json";

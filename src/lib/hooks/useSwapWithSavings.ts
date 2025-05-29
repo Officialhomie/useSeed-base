@@ -60,6 +60,13 @@ interface UseSwapWithSavingsProps {
   disableSavings: boolean;
 }
 
+interface SwapExecutionResult {
+  gasOptimizationAchieved?: boolean;
+  gasOptimized?: boolean;
+  // Allow any other properties (for compatibility)
+  [key: string]: any;
+}
+
 interface SwapWithSavingsResult {
   executionStatus: 'idle' | 'validating-strategy' | 'setting-strategy' | 'checking-approvals' | 'approving-tokens' | 'preparing' | 'pending' | 'success' | 'error';
   error: Error | null;
@@ -115,6 +122,18 @@ interface SwapWithSavingsResult {
   processDCAQueue: () => Promise<void>;
   getDCAQueueInfo: () => Promise<{length: number; items: any[]}>;
   clearDCAResults: () => void;
+
+  // V4-specific returns
+  v4Quote: {
+    amountOut: string;
+    gasEstimate: string;
+    priceImpact: number;
+    route: string;
+  } | null;
+  v4ContractsValid: boolean;
+  v4QuoteAvailable: boolean;
+  v4GasOptimized: boolean;
+  estimatedGasSavings: string | null;
 }
 
 /**
@@ -167,6 +186,23 @@ export default function useSwapWithSavings(
     amount: string;
   }>>([]);
   const [isDcaProcessing, setIsDcaProcessing] = useState(false);
+
+  const [v4QuoteResult, setV4QuoteResult] = useState<{
+    amountOut: string;
+    gasEstimate: string;
+    priceImpact: number;
+    route: string;
+  } | null>(null);
+  
+  const [v4ValidationStatus, setV4ValidationStatus] = useState<{
+    contractsValid: boolean;
+    quoteAvailable: boolean;
+    gasOptimized: boolean;
+  }>({
+    contractsValid: false,
+    quoteAvailable: false,
+    gasOptimized: false
+  });
 
   // ========== DERIVED VALUES ==========
   const fromToken = props?.fromToken || 'ETH';
@@ -880,14 +916,14 @@ export default function useSwapWithSavings(
 
   // ========== PHASE 2: ENHANCED SWAP EXECUTION WITH BLOCKING VALIDATION ==========
   const executeSwapFunction = async () => {
-    console.log('🚀 PHASE 2: Starting swap execution with enhanced validation...');
+    console.log('Starting V4 swap with Universal Router...');
     
     if (!props || !address || !amount || parseFloat(amount) <= 0) {
       throw new Error('Invalid swap parameters');
     }
 
     // PHASE 2: Pre-execution validation gate
-    console.log('🔒 PHASE 2: Checking pre-execution gates...');
+    console.log(' Checking pre-execution gates...');
     if (!canExecuteSwap) {
       if (strategyValidation.blockingErrors.length > 0) {
         const primaryError = strategyValidation.blockingErrors[0];
@@ -977,20 +1013,46 @@ export default function useSwapWithSavings(
     }
 
     try {
+      console.log('🔍 Getting V4 quote before execution...');
+      setExecutionStatus('preparing');
+      
+      // Get quote first for better UX
+      try {
+        const quote = await cliInstance.getV4Quote({
+          fromToken,
+          toToken,
+          amountIn: actualSwapAmount,
+          hookData: ethers.utils.defaultAbiCoder.encode(['address'], [address])
+        });
+        
+        setV4QuoteResult(quote);
+        setV4ValidationStatus(prev => ({ ...prev, quoteAvailable: true }));
+        console.log('✅ V4 quote received:', quote);
+      } catch (quoteError) {
+        console.warn('⚠️ V4 quote failed, proceeding without quote:', quoteError);
+        setV4ValidationStatus(prev => ({ ...prev, quoteAvailable: false }));
+      }
+
       const slippageBps = Math.floor(slippage * 100);
+      console.log('🚀 Executing V4 swap via Universal Router...');
+      setExecutionStatus('pending');
+      
       const txResponse = await cliInstance.executeSwap({
         fromToken,
         toToken,
         amountRaw: actualSwapAmount,
         slippageBps,
         disableSavings,
-        hookFlags: disableSavings ? { before: false, after: false, delta: false } : undefined,
       });
 
       const txHash = txResponse.hash as `0x${string}`;
       setTransactionHash(txHash);
-      setExecutionStatus('pending');
       setSavedAmount(savingsPreview.rawAmount);
+      
+
+      // if (txResponse.gasOptimized) {
+      //   setV4ValidationStatus(prev => ({ ...prev, gasOptimized: true }));
+      // }
 
       // PHASE 3: Set up event listener cleanup and real-time monitoring
       if (txResponse.eventListeners) {
@@ -1004,6 +1066,20 @@ export default function useSwapWithSavings(
       console.log('🔄 PHASE 4: Setting up post-swap DCA processing...');
     } catch (swapError) {
       const errorMessage = swapError instanceof Error ? swapError.message : String(swapError);
+
+      if (errorMessage.includes('V4 Slippage Error')) {
+        throw new Error('Output amount below expected minimum. Try increasing slippage tolerance or reducing trade size.');
+      } else if (errorMessage.includes('V4 Input Error')) {
+        throw new Error('Trade size too large for available liquidity. Try a smaller amount.');
+      } else if (errorMessage.includes('V4 Settlement Error')) {
+        throw new Error('Token settlement failed. This may be due to insufficient liquidity or hook execution issues.');
+      } else if (errorMessage.includes('V4 Authorization Error')) {
+        throw new Error('Hook authorization failed. Please check your SpendSave configuration.');
+      } else if (errorMessage.includes('V4 State Error')) {
+        throw new Error('Pool manager temporarily locked. Please wait a moment and try again.');
+      } else if (errorMessage.includes('V4 Execution Error')) {
+        throw new Error('Transaction execution failed. This may be due to insufficient liquidity or network congestion.');
+      }
       
       if (errorMessage.includes('insufficient funds')) {
         throw new Error('Insufficient ETH for gas fees. Try a smaller amount or set aside more ETH for gas.');
@@ -1056,6 +1132,13 @@ export default function useSwapWithSavings(
     onDCAQueued,
     onSwapError,
     cleanupEventListeners,
+    // 🆕 V4-specific returns:
+    v4Quote: v4QuoteResult,
+    v4ContractsValid: v4ValidationStatus.contractsValid,
+    v4QuoteAvailable: v4ValidationStatus.quoteAvailable,
+    v4GasOptimized: v4ValidationStatus.gasOptimized,
+    estimatedGasSavings: v4ValidationStatus.gasOptimized ? '~40-50%' : null,
+
     // PHASE 4: DCA integration returns
     dcaQueueStatus,
     dcaQueueLength,

@@ -31,6 +31,11 @@ import SpendSaveHookABI from '@/abi/core/SpendSaveHook.json'
 import DCAABI from '@/abi/trading/DCA.json';
 import { Address } from 'viem'
 
+import { V4UniversalRouterClient, V4SwapParams } from './V4UniversalRouterClient';
+import { V4QuoterClient, QuoteParams } from './V4QuoterClient';
+import { V4_CONTRACTS } from './v4Constants';
+import { validateV4Deployment } from '../contracts';
+
 
 // Add interface for enhanced transaction result
 interface SwapExecutionResult extends ethers.providers.TransactionResponse {
@@ -194,6 +199,10 @@ export class UniswapV4Client {
   private isInitialized: boolean = false;
   private networkStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
 
+  private v4RouterClient: V4UniversalRouterClient;
+  private v4QuoterClient: V4QuoterClient;
+  private v4ContractsValidated: boolean = false;
+
   private activeEventListeners: Map<string, EventListenerManager> = new Map();
   private eventCallbacks: Map<string, Array<(data: any) => void>> = new Map();
   private contractsValidated: boolean = false;
@@ -202,12 +211,55 @@ export class UniswapV4Client {
     this.provider = provider
     this.signer = signer
     this.baseScanClient = new BaseScanClient();
+
+    this.v4RouterClient = new V4UniversalRouterClient(provider, signer);
+    this.v4QuoterClient = new V4QuoterClient(provider);
     
     // Initialize network detection
     this.detectNetwork().catch(err => {
       console.warn('Network detection failed during construction:', err);
       this.networkStatus = 'disconnected';
     });
+  }
+
+  async validateV4Contracts(): Promise<boolean> {
+    if (this.v4ContractsValidated) return true;
+
+    console.log('🔍 Validating V4 contract deployments on Base...');
+    
+    const validation = await validateV4Deployment(this.provider);
+    
+    if (!validation.isValid) {
+      console.error('❌ V4 contract validation failed:');
+      validation.errors.forEach(error => console.error(`  ${error}`));
+      return false;
+    }
+    
+    console.log('✅ All V4 contracts validated:', validation.deployedContracts);
+    this.v4ContractsValidated = true;
+    return true;
+  }
+
+  async getV4Quote(params: {
+    fromToken: SupportedTokenSymbol;
+    toToken: SupportedTokenSymbol;
+    amountIn: string;
+    hookData?: string;
+  }) {
+    if (!this.v4ContractsValidated) {
+      await this.validateV4Contracts();
+    }
+
+    console.log('🔍 Getting V4 quote via Quoter contract...');
+    
+    const quoteParams: QuoteParams = {
+      fromToken: params.fromToken,
+      toToken: params.toToken,
+      amountIn: params.amountIn,
+      hookData: params.hookData || ethers.utils.defaultAbiCoder.encode(['address'], [this.userAddress || ethers.constants.AddressZero])
+    };
+
+    return await this.v4QuoterClient.getQuote(quoteParams);
   }
 
   // Detect network and ensure we're on Base mainnet (chainId 8453)
@@ -488,13 +540,17 @@ export class UniswapV4Client {
    */
   async init(userAddress?: string): Promise<void> {
     try {
-      // Validate network first
       await this.validateNetworkOrThrow();
       
-      // Continue with existing initialization...
+      // 🆕 Validate V4 contracts
+      const v4Valid = await this.validateV4Contracts();
+      if (!v4Valid) {
+        throw new Error('V4 contract validation failed');
+      }
+      
       const contractsValid = await this.validateAllContracts();
       if (!contractsValid) {
-        throw new Error('Contract validation failed - cannot proceed with initialization');
+        throw new Error('SpendSave contract validation failed');
       }
   
       this.ethPriceInUsd = await this.getEthPrice();
@@ -506,9 +562,9 @@ export class UniswapV4Client {
       }
       
       this.isInitialized = true;
-      console.log('✅ UniswapV4Client initialized successfully');
+      console.log('✅ UniswapV4Client initialized with V4 Universal Router');
     } catch (error) {
-      console.error("Failed to initialize UniswapV4Client:", error);
+      console.error("❌ Failed to initialize UniswapV4Client:", error);
       throw error;
     }
   }
@@ -1019,24 +1075,25 @@ export class UniswapV4Client {
   }): Promise<SwapExecutionResult> {
     if (!this.signer) throw new Error('Signer not initialised')
 
-    // PHASE 1: Verify hook integration before proceeding with swap
-    console.log('🚀 Starting swap execution with Phase 1 verification...');
+    // Validate V4 contracts first
+    const v4Valid = await this.validateV4Contracts();
+    if (!v4Valid) {
+      throw new Error('V4 contract validation failed - cannot proceed with swap');
+    }
+
+    // PHASE 1: Hook verification (keep existing)
+    console.log('🚀 Starting V4 swap execution via Universal Router...');
     const isHookReady = await this.verifyHookIntegration();
     
     if (!isHookReady) {
-      const errorMsg = 'SpendSave hook integration verification failed. Cannot proceed with swap.';
-      console.error('❌', errorMsg);
-      throw new Error(errorMsg);
+      throw new Error('SpendSave hook integration verification failed.');
     }
-    
-    console.log('✅ Phase 1: Hook verification passed, proceeding with swap...');
 
     const {
       fromToken,
       toToken,
       amountRaw,
-      slippageBps = 50, // Default to 0.5%
-      fee = 3000,
+      slippageBps = 50,
       disableSavings = false,
     } = params
 
@@ -1050,7 +1107,6 @@ export class UniswapV4Client {
       tokenA.decimals
     ).toString()
 
-    // Fallback to ETH if needed
     if (!this.userAddress && this.signer) {
       this.userAddress = await this.signer.getAddress()
     }
@@ -1059,105 +1115,109 @@ export class UniswapV4Client {
       throw new Error('User address not available')
     }
 
-    // PHASE 1: Pre-swap strategy validation
+    // Strategy validation (keep existing)
     if (!disableSavings) {
-      console.log('🔍 PHASE 1: Validating user savings strategy...');
+      console.log('🔍 Validating user savings strategy...');
       await this.validateUserStrategy();
     }
 
-    const valueToSend = fromToken === 'ETH' ? ethers.utils.parseUnits(amountRaw, 18) : ethers.BigNumber.from(0);
+    const valueToSend = fromToken === 'ETH' ? 
+      ethers.utils.parseUnits(amountRaw, 18) : 
+      ethers.BigNumber.from(0);
 
-    // Create PoolManager contract instance
-    const poolManagerContract = new ethers.Contract(
-      CONTRACT_ADDRESSES.UNISWAP_BASE_MAINNET_POOL_MANAGER,
-      PoolManagerAbi,
-      this.signer
-    );
-
-    // Create hook-enabled pool key (CRITICAL: Must include hook address)
-    const [token0, token1] = tokenA.address.toLowerCase() < tokenB.address.toLowerCase() 
-      ? [tokenA.address, tokenB.address] 
-      : [tokenB.address, tokenA.address];
-    
-      const poolKey = createPoolKey(
-        getTokenBySymbol(fromToken).address as Address,
-        getTokenBySymbol(toToken).address as Address,
-        fee
-      );
-
-    
-
-    // Create SwapParams structure
-    const zeroForOne = tokenA.address.toLowerCase() < tokenB.address.toLowerCase();
-    const sqrtLimit = getSqrtPriceLimit(zeroForOne, slippageBps / 100);
-    
-    const swapParams = {
-      zeroForOne: zeroForOne,
-      amountSpecified: `-${amountInRaw}`, // Negative for exact input
-      sqrtPriceLimitX96: sqrtLimit.toString()
-    };
-
-    // Properly encode user address in hookData using ABI encoding
+    // Prepare hookData (keep existing encoding)
     const hookData = ethers.utils.defaultAbiCoder.encode(
       ['address'],
       [this.userAddress]
     );
 
-    console.log('Direct PoolManager.swap call', {
-      poolKey,
-      swapParams,
-      hookData,
-      valueToSend: valueToSend.toString()
-    });
-
-
+    // 🆕 Get quote first for better UX and validation
     try {
-      console.log('🚀 PHASE 3: Executing PoolManager.swap with real-time event listening...');
+      const quote = await this.getV4Quote({
+        fromToken,
+        toToken,
+        amountIn: amountRaw,
+        hookData
+      });
       
-      // PHASE 3: Set up real-time event listeners before transaction
-      const eventManager = await this.setupRealTimeEventListeners(fromToken, toToken);
+      console.log('💰 V4 Quote received:', {
+        amountOut: quote.amountOut,
+        gasEstimate: quote.gasEstimate,
+        priceImpact: quote.priceImpact
+      });
       
-      const tx = await poolManagerContract.swap(
-        poolKey,
-        swapParams, 
+      // Calculate minimum amount out with slippage
+      const amountOutQuote = parseFloat(quote.amountOut);
+      const minAmountOut = ethers.utils.parseUnits(
+        (amountOutQuote * (1 - slippageBps / 10000)).toFixed(6),
+        tokenB.decimals
+      ).toString();
+
+      // 🆕 Build V4 swap parameters
+      const v4SwapParams: V4SwapParams = {
+        fromToken,
+        toToken,
+        amountIn: amountInRaw,
+        amountOutMinimum: minAmountOut,
+        recipient: this.userAddress,
+        deadline: Math.floor(Date.now() / 1000) + 1800, // 30 minutes
         hookData,
-        {
-          value: valueToSend,
-        }
-      );
-      
-      console.log('✅ PoolManager.swap transaction sent:', tx.hash);
-      console.log('🎧 PHASE 3: Event listeners active, monitoring for savings events...');
-      
-      // PHASE 3: Start monitoring events immediately
+        ethValue: valueToSend
+      };
+
+      // PHASE 3: Set up event listeners (keep existing)
+      const eventManager = await this.setupRealTimeEventListeners(fromToken, toToken);
       eventManager.startListening();
       
-      // PHASE 1: Post-swap hook verification (enhanced with event data)
+      // 🆕 Execute via V4 Universal Router
+      const tx = await this.v4RouterClient.executeV4Swap(v4SwapParams);
+      
+      console.log('✅ V4 Universal Router transaction sent:', tx.hash);
+      
+      // Enhanced transaction result
+      const enhancedTx = tx as SwapExecutionResult;
+      
+      // Set up event listener cleanup
+      enhancedTx.eventListeners = {
+        cleanup: () => eventManager.stopListening(),
+        status: eventManager.getStatus() as 'listening' | 'completed' | 'error',
+        eventsReceived: eventManager.getEventsReceived()
+      };
+
+      // Hook execution verification
       if (!disableSavings) {
-        console.log('🔍 PHASE 1+3: Starting hook execution verification with event monitoring...');
+        console.log('🔍 Starting V4 hook execution verification...');
         const hookStatus = await this.verifyHookExecutionWithEvents(tx, fromToken, toToken, eventManager);
-        
-        // Enhance transaction object with hook status and event management
-        (tx as SwapExecutionResult).hookExecutionStatus = hookStatus;
-        (tx as SwapExecutionResult).eventListeners = {
-          cleanup: () => eventManager.stopListening(),
-          status: eventManager.getStatus() as 'listening' | 'completed' | 'error',
-          eventsReceived: eventManager.getEventsReceived()
-        };
+        enhancedTx.hookExecutionStatus = hookStatus;
         
         if (hookStatus.errors.length > 0) {
-          console.warn('⚠️ Hook execution issues detected:', hookStatus.errors);
-        } else {
-          console.log('✅ All hooks executed successfully');
+          console.warn('⚠️ Hook execution issues:', hookStatus.errors);
         }
       }
       
+      return enhancedTx;
+
+    } catch (quoteError) {
+      console.warn('⚠️ V4 quote failed, proceeding without quote:', quoteError);
+      
+      // Fallback: proceed without quote (less optimal but still functional)
+      const minAmountOut = ethers.utils.parseUnits(
+        (parseFloat(amountRaw) * (1 - slippageBps / 10000)).toFixed(6),
+        tokenB.decimals
+      ).toString();
+
+      const v4SwapParams: V4SwapParams = {
+        fromToken,
+        toToken,
+        amountIn: amountInRaw,
+        amountOutMinimum: minAmountOut,
+        recipient: this.userAddress,
+        hookData,
+        ethValue: valueToSend
+      };
+
+      const tx = await this.v4RouterClient.executeV4Swap(v4SwapParams);
       return tx as SwapExecutionResult;
-    } catch (error) {
-      console.error('❌ Swap execution error:', error)
-      // PHASE 3: Clean up event listeners on error
-      this.cleanupEventListeners();
-      throw error
     }
   }
 
