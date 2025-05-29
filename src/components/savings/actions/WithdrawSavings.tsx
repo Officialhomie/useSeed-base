@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { motion } from "framer-motion";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
-import DailySavingsABI from "@/ABI/DailySavings.json";
+import DailySavingsABI from "@/abi/savings/DailySavings.json";
 
 export default function WithdrawSavings({ onClose, savedTokens = [] }: { 
   onClose: () => void, 
