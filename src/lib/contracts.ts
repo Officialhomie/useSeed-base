@@ -20,6 +20,7 @@ export const CONTRACT_ADDRESSES = {
   TOKEN: "0xDd68A972612900DC5c25f3C643a1d85C9B69b8F4" as Address,
 
   UNISWAP_BASE_MAINNET_POOL_MANAGER: "0x498581ff718922c3f8e6a244956af099b2652b2b" as Address,
+  UNISWAP_BASE_MAINNET_UNIVERSAL_ROUTER: "0x6ff5693b99212da76ad316178a184ab56d299b43" as Address,
   // Common token addresses
   ETH: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as Address, // ETH address stays the same
   USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address, // Base Mainnet USDC
