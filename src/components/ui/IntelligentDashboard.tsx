@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useAccount, useBalance } from "wagmi";
+import { http, useAccount, useBalance } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { BaseScanClient } from '@/lib/basescan/BaseScanClient';
+import { CONTRACT_ADDRESSES } from "@/lib/contracts";
+import { createPublicClient, formatUnits, parseAbiItem, Address } from 'viem';
+import { baseSepolia } from 'viem/chains';
 
 // Custom SVG Icons
 const IconArrowRight = () => (
@@ -70,81 +73,125 @@ const baseScanClient = new BaseScanClient(process.env.NEXT_PUBLIC_BASESCAN_API_K
 
 // Mock data fetching functions (would be real API calls in production)
 const fetchUserSavings = async (address: string): Promise<SavingsData> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Mock data
-  return {
-    totalSaved: 1.45,
-    savingsGoal: 5.0,
-    savingsRate: 0.01,
-    nextSavingDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    savingsHistory: Array.from({ length: 30 }).map((_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString(),
-      amount: 0.01 + (Math.random() * 0.005),
-    })),
-  };
+  const publicClient = createPublicClient({
+    chain: baseSepolia,
+    transport: http()
+  });
+
+  try {
+    // Get real savings history from events
+    const currentBlockNumber = Number(await publicClient.getBlockNumber());
+    const fromBlock = BigInt(Math.max(0, currentBlockNumber - 50000));
+    const amountSavedEvents = await publicClient.getLogs({
+      address: CONTRACT_ADDRESSES.SAVING,
+      event: parseAbiItem('event AmountSaved(address indexed user, address indexed token, uint256 amount, uint256 totalSaved)'),
+      args: { user: address as Address },
+      fromBlock,
+      toBlock: 'latest'
+    });
+
+    // Calculate real savings rate and totals
+    let totalSaved = 0;
+    const savingsHistory: { date: string; amount: number }[] = [];
+    
+    amountSavedEvents.forEach((event: any) => {
+      const amount = parseFloat(formatUnits(event.args.amount!, 18));
+      totalSaved += amount;
+      
+      savingsHistory.push({
+        date: new Date(Number(event.blockNumber) * 12 * 1000).toISOString(),
+        amount: amount
+      });
+    });
+
+    // Calculate savings rate (amount per day)
+    const daysSinceFirstSave = savingsHistory.length > 0 ? 
+      (Date.now() - new Date(savingsHistory[0].date).getTime()) / (1000 * 60 * 60 * 24) : 1;
+    const savingsRate = totalSaved / Math.max(daysSinceFirstSave, 1);
+
+    return {
+      totalSaved: parseFloat(totalSaved.toFixed(4)),
+      savingsGoal: 5.0, // This could come from user settings
+      savingsRate: parseFloat(savingsRate.toFixed(6)),
+      nextSavingDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      savingsHistory: savingsHistory.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    };
+  } catch (error) {
+    console.error('Error fetching real savings data:', error);
+    // Fallback to basic data if blockchain query fails
+    return {
+      totalSaved: 0,
+      savingsGoal: 5.0,
+      savingsRate: 0,
+      nextSavingDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      savingsHistory: []
+    };
+  }
 };
 
 const fetchDCAPerformance = async (address: string): Promise<DCAPerformance> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 700));
-  
-  // Get current ETH price from BaseScan
+  // Get real ETH price
   let currentEthPrice: number;
   try {
     currentEthPrice = await baseScanClient.getEthPrice();
   } catch (error) {
-    console.warn('Failed to fetch ETH price, using estimated value:', error);
-    // Use estimated current market price if API fails - NOT a hardcoded default
-    currentEthPrice = 0; // This will be calculated based on historical prices
+    console.warn('Failed to fetch ETH price:', error);
+    currentEthPrice = 3000; // Reasonable fallback
   }
-  
-  // Generate mock historical prices based on current price
-  const historicalPrices = Array.from({ length: 10 }).map((_, i) => {
-    // Create realistic historical prices with some variance around the current price
-    // This simulates price movements in the past without using hard-coded values
-    const randomVariance = 0.05; // 5% random variance
-    const dayOffset = 9 - i; // Days in the past
-    const volatilityFactor = 0.01; // 1% daily volatility
-    
-    // Calculate a realistic price based on current price with mock variance
-    const trendFactor = 1 - (dayOffset * volatilityFactor);
-    const randomFactor = 1 + (Math.random() * 2 - 1) * randomVariance;
-    
+
+  try {
+    const publicClient = createPublicClient({
+      chain: baseSepolia,
+      transport: http()
+    });
+
+    // Get real DCA events from blockchain
+    const currentBlockNumber = Number(await publicClient.getBlockNumber());
+    const fromBlock = BigInt(Math.max(0, currentBlockNumber - 100000));
+    const dcaEvents = await publicClient.getLogs({
+      address: CONTRACT_ADDRESSES.DCA,
+      event: parseAbiItem('event DCAExecuted(address indexed user, address indexed fromToken, address indexed toToken, uint256 amountIn, uint256 amountOut)'),
+      args: { user: address as Address },
+      fromBlock,
+      toBlock: 'latest'
+    });
+
+    // Process real DCA transactions
+    const transactions = dcaEvents.map((event: any) => ({
+      date: new Date(Number(event.blockNumber) * 12 * 1000).toISOString(),
+      price: currentEthPrice, // Simplified - should get historical price
+      amount: parseFloat(formatUnits(event.args.amountIn!, 18)),
+    }));
+
+    const totalAmount = transactions.reduce((sum: number, tx: { amount: number }) => sum + tx.amount, 0);
+    const totalValue = transactions.reduce((sum: number, tx: { price: number, amount: number }) => sum + (tx.price * tx.amount), 0);
+    const averageBuyPrice = totalAmount > 0 ? totalValue / totalAmount : 0;
+    const currentValue = totalAmount * currentEthPrice;
+
     return {
-      date: new Date(Date.now() - dayOffset * 7 * 24 * 60 * 60 * 1000).toISOString(),
-      price: currentEthPrice ? currentEthPrice * trendFactor * randomFactor : 0,
-      amount: 0.05,
+      totalInvested: totalValue,
+      currentValue: currentValue,
+      averageBuyPrice: averageBuyPrice,
+      lastBuyDate: transactions.length > 0 ? transactions[transactions.length - 1].date : new Date().toISOString(),
+      nextBuyDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      tokenBalance: totalAmount,
+      token: "ETH",
+      transactions: transactions,
     };
-  });
-  
-  // If we couldn't get current price, estimate from our mock data
-  if (!currentEthPrice && historicalPrices.length > 0) {
-    // Use the most recent mock price in our data
-    currentEthPrice = historicalPrices[historicalPrices.length - 1].price;
+  } catch (error) {
+    console.error('Error fetching real DCA data:', error);
+    // Return empty data if can't fetch from blockchain
+    return {
+      totalInvested: 0,
+      currentValue: 0,
+      averageBuyPrice: currentEthPrice,
+      lastBuyDate: new Date().toISOString(),
+      nextBuyDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      tokenBalance: 0,
+      token: "ETH",
+      transactions: [],
+    };
   }
-  
-  // Calculate average buy price from historical data
-  const totalAmount = historicalPrices.reduce((sum, tx) => sum + tx.amount, 0);
-  const totalValue = historicalPrices.reduce((sum, tx) => sum + (tx.price * tx.amount), 0);
-  const averageBuyPrice = totalAmount > 0 ? totalValue / totalAmount : 0;
-  
-  // Calculate current value based on current price
-  const tokenBalance = totalAmount;
-  const currentValue = tokenBalance * currentEthPrice;
-  
-  // Return data with dynamically calculated values
-  return {
-    totalInvested: totalValue,
-    currentValue: currentValue,
-    averageBuyPrice: averageBuyPrice,
-    lastBuyDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    nextBuyDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    tokenBalance: tokenBalance,
-    token: "ETH",
-    transactions: historicalPrices,
-  };
 };
 
 const fetchYieldPerformance = async (address: string): Promise<YieldData> => {

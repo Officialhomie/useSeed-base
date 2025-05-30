@@ -69,6 +69,20 @@ const SavingsSummary: React.FC<SavingsSummaryProps> = ({
     functionName: 'getUserSavingsGoal',
     args: address ? [address] : undefined,
   });
+
+  const { data: treasuryFeeData } = useReadContract({
+    address: CONTRACT_ADDRESSES.SPEND_SAVE_STORAGE,
+    abi: [
+      {
+        name: 'treasuryFee',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }]
+      }
+    ],
+    functionName: 'treasuryFee',
+  });
   
   // Format total saved
   const totalSaved = totalSavedData ? formatUnits(totalSavedData, 18) : '0';
@@ -87,10 +101,27 @@ const SavingsSummary: React.FC<SavingsSummaryProps> = ({
     Math.min(100, (Number(totalSavedData) / Number(savingsGoalData[0])) * 100) : 0;
   
   const isLoading = isLoadingSaved || isLoadingGoal;
+
+  
   
   // Get the current savings amount for this transaction
   const currentSavingsAmount = calculateSavingsAmount();
   const savingsIsActive = currentSavingsAmount && parseFloat(currentSavingsAmount) > 0;
+
+  // Calculate treasury fee for this transaction
+  const calculateTreasuryFee = useCallback(() => {
+    if (!treasuryFeeData || !currentSavingsAmount) return "0";
+    
+    const feePercentage = Number(treasuryFeeData) / 10000; // Convert from basis points
+    const savingsAmount = parseFloat(currentSavingsAmount);
+    const feeAmount = savingsAmount * feePercentage;
+    
+    return feeAmount.toFixed(6);
+  }, [treasuryFeeData, currentSavingsAmount]);
+
+
+  const treasuryFee = calculateTreasuryFee();
+  const netSavedAmount = currentSavingsAmount ? (parseFloat(currentSavingsAmount) - parseFloat(treasuryFee)).toFixed(6) : "0";
   
   if (isLoading) {
     return (
@@ -110,10 +141,24 @@ const SavingsSummary: React.FC<SavingsSummaryProps> = ({
         </p>
         
         {savingsIsActive && (
-          <p>
-            <span className="text-gray-400">Saved: </span>
-            <span className="text-white">{currentSavingsAmount} {fromToken}</span>
-          </p>
+          <>
+            <p>
+              <span className="text-gray-400">Gross Saved: </span>
+              <span className="text-white">{currentSavingsAmount} {fromToken}</span>
+            </p>
+            
+            {parseFloat(treasuryFee) > 0 && (
+              <p>
+                <span className="text-gray-400">Treasury Fee: </span>
+                <span className="text-orange-400">-{treasuryFee} {fromToken}</span>
+              </p>
+            )}
+            
+            <p>
+              <span className="text-gray-400">Net Saved: </span>
+              <span className="text-green-400">{netSavedAmount} {fromToken}</span>
+            </p>
+          </>
         )}
         
         <div className="pt-1 text-gray-400 text-xs">
