@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useBalance, useWriteContract, useReadContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseEther, formatEther } from "viem";
-import { Address } from "viem";
+import { useAccount, useBalance, useWriteContract, useReadContract, useWaitForTransactionReceipt, useWatchContractEvent } from "wagmi";
+import { parseEther, formatEther, formatUnits } from "viem";
+import { Address,  } from "viem";
 import { motion } from "framer-motion";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
+import { useNotification } from '@/components/core/NotificationManager';
 
 // Import ABIs
 import DailySavingsABI from "@/abi/savings/DailySavings.json";
@@ -438,6 +439,7 @@ const ManagePlanModal = ({
 
 // Main component
 export default function SavingsComponent() {
+  const { addNotification } = useNotification();
   const [mounted, setMounted] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -475,6 +477,39 @@ export default function SavingsComponent() {
     functionName: 'getDailySavingsStatus',
     args: [address, ETH_ADDRESS],
     query: { enabled: !!address && mounted },
+  });
+
+  // Real-time savings updates
+  useWatchContractEvent({
+    address: CONTRACT_ADDRESSES.SAVING,
+    abi: [
+      {
+        anonymous: false,
+        inputs: [
+          { indexed: true, name: 'user', type: 'address' },
+          { indexed: true, name: 'token', type: 'address' },
+          { indexed: false, name: 'amount', type: 'uint256' },
+          { indexed: false, name: 'totalSaved', type: 'uint256' }
+        ],
+        name: 'AmountSaved',
+        type: 'event'
+      }
+    ],
+    eventName: 'AmountSaved',
+    onLogs: (logs) => {
+      for (const log of logs) {
+        if (log.args?.user === address) {
+          // Refresh savings data when new amount is saved
+          fetchAllSavingsPlans();
+          
+          addNotification({
+            type: 'success',
+            title: 'Savings Updated',
+            message: `New savings recorded: ${formatUnits(log.args.amount!, 18)} ETH`
+          });
+        }
+      }
+    }
   });
 
   // Function to fetch all savings plans for the user
