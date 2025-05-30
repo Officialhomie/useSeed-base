@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowUp, FiBarChart2, FiDollarSign, FiTarget, FiClock, FiAward, FiAlertCircle } from 'react-icons/fi';
 import AnimatedProgressBar from '@/components/onboarding/AnimatedProgressBar';
 import SavingsCalculator from '@/components/savings/visualisation/SavingsCalculator';
+import useSavingsData from '@/lib/hooks/useSavingsData';
 
 // Import ABIs
 import SPEND_SAVE_STORAGE_ABI from '@/abi/core/SpendSaveStorage.json';
@@ -45,18 +46,20 @@ const TokenIcon = ({ symbol }: { symbol: string }) => {
 // Component to display a summary of a user's savings
 export default function SavingsOverview() {
   const { address, isConnected } = useAccount();
-  const [isLoading, setIsLoading] = useState(true);
-  const [totalSavingsValue, setTotalSavingsValue] = useState('0');
-  const [savingsGoal, setSavingsGoal] = useState('0');
-  const [goalProgress, setGoalProgress] = useState(0);
   const [savedTokens, setSavedTokens] = useState<Address[]>([]);
   const [tokenBalances, setTokenBalances] = useState<{[key: string]: string}>({});
   const [goalToken, setGoalToken] = useState<Address | undefined>(undefined);
   const [selectedTimeframe, setSelectedTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [showEmptyState, setShowEmptyState] = useState(false);
+  const [totalPortfolioValueETH, setTotalPortfolioValueETH] = useState('0');
+  const [totalPortfolioValueUSD, setTotalPortfolioValueUSD] = useState('0');
 
   // Access Viem public client for direct contract reads (non-hook).
   const publicClient = usePublicClient();
+
+  // ✅ Single comprehensive hook usage (adapted to existing interface)
+  const savingsDataHook = useSavingsData();
+  const isLoading = savingsDataHook.isLoading;
 
   // Get token symbol from address
   const getTokenSymbol = useCallback((tokenAddress: Address): string => {
@@ -82,6 +85,34 @@ export default function SavingsOverview() {
     args: address ? [address] : undefined,
   });
 
+  // Calculate portfolio totals
+  const calculatePortfolioTotals = useCallback(() => {
+    let totalETH = 0;
+    let totalUSD = 0;
+
+    Object.entries(tokenBalances).forEach(([tokenAddress, balance]) => {
+      const amount = parseFloat(balance);
+      const symbol = getTokenSymbol(tokenAddress as Address);
+      
+      switch (symbol) {
+        case 'ETH':
+        case 'WETH':
+          totalETH += amount;
+          totalUSD += amount * 3000; // Mock ETH price
+          break;
+        case 'USDC':
+          totalUSD += amount;
+          totalETH += amount / 3000; // Convert to ETH equivalent
+          break;
+        default:
+          break;
+      }
+    });
+
+    setTotalPortfolioValueETH(totalETH.toFixed(4));
+    setTotalPortfolioValueUSD(totalUSD.toFixed(2));
+  }, [tokenBalances, getTokenSymbol]);
+
   // Fetch token balances for each saved token
   const fetchTokenBalances = useCallback(async () => {
     if (!savedTokensData || !address || !isConnected) return;
@@ -90,7 +121,6 @@ export default function SavingsOverview() {
     setSavedTokens(tokens);
     
     if (tokens.length === 0) {
-      setIsLoading(false);
       setShowEmptyState(true);
       return;
     }
@@ -111,25 +141,20 @@ export default function SavingsOverview() {
 
     if (balanceResults) {
       const balances: {[key: string]: string} = {};
-      let totalSaved = 0;
 
       tokens.forEach((token, index) => {
         const raw = balanceResults[index] as bigint | undefined;
         if (raw !== undefined) {
           const balance = formatUnits(raw, 18);
           balances[token] = balance;
-          totalSaved += parseFloat(balance);
         } else {
           balances[token] = '0';
         }
       });
 
       setTokenBalances(balances);
-      setTotalSavingsValue(totalSaved.toFixed(2));
       setShowEmptyState(tokens.length === 0);
     }
-    
-    setIsLoading(false);
   }, [savedTokensData, address, isConnected, publicClient]);
 
   // Process savings goal data
@@ -139,25 +164,13 @@ export default function SavingsOverview() {
     try {
       // Properly type the savings goal data as an array with two elements
       const goalData = savingsGoalData as [bigint, Address];
-      const goalAmount = formatUnits(goalData[0], 18);
       const goalTokenAddress = goalData[1];
       
-      setSavingsGoal(goalAmount);
       setGoalToken(goalTokenAddress);
-      
-      // Calculate progress if we have the balance for the goal token
-      if (goalTokenAddress && tokenBalances[goalTokenAddress]) {
-        const currentAmount = parseFloat(tokenBalances[goalTokenAddress]);
-        const goalAmountFloat = parseFloat(goalAmount);
-        
-        if (goalAmountFloat > 0) {
-          setGoalProgress(Math.min(100, (currentAmount / goalAmountFloat) * 100));
-        }
-      }
     } catch (error) {
       console.error('Error processing savings goal data:', error);
     }
-  }, [savingsGoalData, tokenBalances, address, isConnected]);
+  }, [savingsGoalData, address, isConnected]);
 
   // Fetch balances when tokens change
   useEffect(() => {
@@ -166,10 +179,14 @@ export default function SavingsOverview() {
     }
   }, [savedTokensData, address, isConnected, fetchTokenBalances]);
 
+  // Calculate portfolio totals when balances change
+  useEffect(() => {
+    calculatePortfolioTotals();
+  }, [tokenBalances, calculatePortfolioTotals]);
+
   // Refresh data
-  const refreshData = useCallback(() => {
+  const refreshSavingsData = useCallback(() => {
     if (isConnected) {
-      setIsLoading(true);
       refetchTokens();
       refetchGoal();
       fetchTokenBalances();
@@ -178,7 +195,7 @@ export default function SavingsOverview() {
 
   // Calculate projected savings based on current rate
   const getProjectedSavings = () => {
-    const currentTotal = parseFloat(totalSavingsValue);
+    const currentTotal = parseFloat(totalPortfolioValueETH);
     
     // Estimate based on 2 swaps per week on average and today's amount
     if (currentTotal <= 0) return { daily: 0, weekly: 0, monthly: 0 };
@@ -192,6 +209,14 @@ export default function SavingsOverview() {
   };
   
   const projections = getProjectedSavings();
+
+  // Calculate goal progress and savings goal from tokenSavings and goalToken
+  let goalProgress = 0;
+  let savingsGoal = '0';
+  if (goalToken && savingsDataHook.tokenSavings[goalToken]) {
+    goalProgress = savingsDataHook.tokenSavings[goalToken].goalProgress;
+    savingsGoal = savingsDataHook.tokenSavings[goalToken].savingsGoal;
+  }
 
   // Render the "Not connected" state
   if (!isConnected) {
@@ -218,7 +243,7 @@ export default function SavingsOverview() {
           <p className="text-sm text-gray-400 mt-1">Real-time summary of your savings across all tokens</p>
         </div>
         <motion.button 
-          onClick={refreshData}
+          onClick={refreshSavingsData}
           className="bg-gray-800 hover:bg-gray-700 p-2 rounded-full transition-colors"
           title="Refresh data"
           whileTap={{ scale: 0.95 }}
@@ -256,8 +281,8 @@ export default function SavingsOverview() {
         </div>
       ) : (
         <>
-          {/* Savings Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* ✅ Enhanced Summary Cards with Portfolio Total */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <motion.div 
               className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-5"
               initial={{ opacity: 0, y: 20 }}
@@ -266,16 +291,70 @@ export default function SavingsOverview() {
             >
               <div className="flex items-start justify-between">
                 <div>
+                  <p className="text-gray-400 text-sm">Total Portfolio (USD)</p>
+                  <p className="text-white text-2xl font-bold mt-1.5">
+                    $<AnimatedCounter value={parseFloat(totalPortfolioValueUSD)} />
+                  </p>
+                </div>
+                <div className="p-3 bg-green-500/20 rounded-full">
+                  <FiDollarSign className="text-green-400" size={20} />
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-blue-500/20">
+                <p className="text-xs text-green-400">
+                  <span className="inline-flex items-center">
+                    <FiArrowUp className="mr-1" size={12} />
+                    {totalPortfolioValueETH} ETH equivalent
+                  </span>
+                </p>
+              </div>
+            </motion.div>
+            
+            <motion.div 
+              className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-5"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Active Savings Tokens</p>
+                  <p className="text-white text-2xl font-bold mt-1.5">
+                    <AnimatedCounter value={savedTokens.length} decimals={0} />
+                  </p>
+                </div>
+                <div className="p-3 bg-purple-500/20 rounded-full">
+                  <FiBarChart2 className="text-purple-400" size={20} />
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-purple-500/20">
+                <p className="text-xs text-purple-400">
+                  <span className="inline-flex items-center">
+                    <FiAward className="mr-1" size={12} />
+                    Diversified portfolio
+                  </span>
+                </p>
+              </div>
+            </motion.div>
+            
+            <motion.div 
+              className="bg-green-500/10 border border-green-500/30 rounded-lg p-5"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
                   <p className="text-gray-400 text-sm">Total Tokens Saved</p>
                   <p className="text-white text-2xl font-bold mt-1.5">
-                    <AnimatedCounter value={parseFloat(totalSavingsValue)} />
+                    <AnimatedCounter value={parseFloat(totalPortfolioValueETH)} />
                   </p>
                 </div>
                 <div className="p-3 bg-blue-500/20 rounded-full">
                   <FiDollarSign className="text-blue-400" size={20} />
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-blue-500/20">
+              <div className="mt-3 pt-3 border-t border-green-500/20">
                 <p className="text-xs text-blue-400">
                   <span className="inline-flex items-center">
                     <FiArrowUp className="mr-1" size={12} />
@@ -286,37 +365,10 @@ export default function SavingsOverview() {
             </motion.div>
             
             <motion.div 
-              className="bg-green-500/10 border border-green-500/30 rounded-lg p-5"
+              className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-5"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Token Types Saved</p>
-                  <p className="text-white text-2xl font-bold mt-1.5">
-                    <AnimatedCounter value={savedTokens.length} decimals={0} />
-                  </p>
-                </div>
-                <div className="p-3 bg-green-500/20 rounded-full">
-                  <FiBarChart2 className="text-green-400" size={20} />
-                </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-green-500/20">
-                <p className="text-xs text-green-400">
-                  <span className="inline-flex items-center">
-                    <FiAward className="mr-1" size={12} />
-                    Diversified savings portfolio
-                  </span>
-                </p>
-              </div>
-            </motion.div>
-            
-            <motion.div 
-              className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-5"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 }}
+              transition={{ duration: 0.3, delay: 0.3 }}
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -325,12 +377,12 @@ export default function SavingsOverview() {
                     <AnimatedCounter value={goalProgress} />%
                   </p>
                 </div>
-                <div className="p-3 bg-purple-500/20 rounded-full">
-                  <FiTarget className="text-purple-400" size={20} />
+                <div className="p-3 bg-orange-500/20 rounded-full">
+                  <FiTarget className="text-orange-400" size={20} />
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-purple-500/20">
-                <p className="text-xs text-purple-400">
+              <div className="mt-3 pt-3 border-t border-orange-500/20">
+                <p className="text-xs text-orange-400">
                   <span className="inline-flex items-center">
                     <FiClock className="mr-1" size={12} />
                     {goalProgress < 50 ? 'Just getting started' : goalProgress < 90 ? 'Making good progress' : 'Almost there!'}
@@ -377,25 +429,25 @@ export default function SavingsOverview() {
                       <div className="text-center p-3 bg-gray-900/60 rounded-lg flex-1 mx-1">
                         <p className="text-gray-400 text-xs mb-1">Current</p>
                         <p className="text-white font-medium">
-                          {totalSavingsValue}
+                          {totalPortfolioValueETH}
                         </p>
                       </div>
                       <div className="text-center p-3 bg-blue-500/10 rounded-lg flex-1 mx-1">
                         <p className="text-blue-400 text-xs mb-1">+ 3 months</p>
                         <p className="text-white font-medium">
-                          {(parseFloat(totalSavingsValue) + (projections[selectedTimeframe] * 12)).toFixed(2)}
+                          {(parseFloat(totalPortfolioValueETH) + (projections[selectedTimeframe] * 12)).toFixed(2)}
                         </p>
                       </div>
                       <div className="text-center p-3 bg-green-500/10 rounded-lg flex-1 mx-1">
                         <p className="text-green-400 text-xs mb-1">+ 6 months</p>
                         <p className="text-white font-medium">
-                          {(parseFloat(totalSavingsValue) + (projections[selectedTimeframe] * 24)).toFixed(2)}
+                          {(parseFloat(totalPortfolioValueETH) + (projections[selectedTimeframe] * 24)).toFixed(2)}
                         </p>
                       </div>
                       <div className="text-center p-3 bg-purple-500/10 rounded-lg flex-1 mx-1">
                         <p className="text-purple-400 text-xs mb-1">+ 1 year</p>
                         <p className="text-white font-medium">
-                          {(parseFloat(totalSavingsValue) + (projections[selectedTimeframe] * 52)).toFixed(2)}
+                          {(parseFloat(totalPortfolioValueETH) + (projections[selectedTimeframe] * 52)).toFixed(2)}
                         </p>
                       </div>
                     </div>
@@ -485,7 +537,7 @@ export default function SavingsOverview() {
               }}
               overridePercentage={null}
               disableSavings={false}
-              totalSaved={totalSavingsValue}
+              totalSaved={totalPortfolioValueETH}
               savingsGoalProgress={goalProgress}
             />
           </div>
@@ -501,7 +553,7 @@ export default function SavingsOverview() {
                 savedTokens.map((token, index) => {
                   const tokenSymbol = getTokenSymbol(token);
                   const tokenAmount = parseFloat(tokenBalances[token] || '0');
-                  const tokenPercentage = (tokenAmount / parseFloat(totalSavingsValue)) * 100;
+                  const tokenPercentage = parseFloat(totalPortfolioValueETH) > 0 ? (tokenAmount / parseFloat(totalPortfolioValueETH)) * 100 : 0;
                   
                   return (
                     <motion.div 
@@ -572,4 +624,4 @@ export default function SavingsOverview() {
       )}
     </div>
   );
-} 
+}
