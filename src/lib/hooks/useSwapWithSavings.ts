@@ -802,6 +802,27 @@ export default function useSwapWithSavings(
     }
   }, [address, signer, getSavingStrategyContract, validateStrategy]);
 
+  // Enhanced success effect with savings data refresh
+  useEffect(() => {
+    if (isSuccess && transactionHash) {
+      console.log('✅ Swap successful, refreshing all savings data...');
+      
+      // Trigger refresh of savings data across the app
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('savingsDataUpdated', {
+          detail: { transactionHash, savedAmount }
+        }));
+      }
+      
+      // Cleanup event listeners after success
+      if (cleanupEventListeners) {
+        setTimeout(() => {
+          cleanupEventListeners();
+        }, 5000); // Clean up after 5 seconds
+      }
+    }
+  }, [isSuccess, transactionHash, savedAmount, cleanupEventListeners]);
+
   // ========== VALIDATION EFFECTS ==========
   useEffect(() => {
     if (props && fromToken === toToken) {

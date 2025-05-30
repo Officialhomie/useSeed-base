@@ -1,7 +1,7 @@
 import { useAccount, useBalance } from 'wagmi';
 import { CONTRACT_ADDRESSES } from '../contracts';
 import { useCallback, useEffect, useState } from 'react';
-import { formatUnits, createPublicClient, http, isAddress, getAddress } from 'viem';
+import { formatUnits, createPublicClient, http, isAddress, getAddress, Address } from 'viem';
 import { baseSepolia } from 'viem/chains';
 
 // Utility functions for address validation
@@ -83,8 +83,69 @@ const DEFAULT_TOKEN_DATA = {
     address: CONTRACT_ADDRESSES.WETH,
     decimals: 18
   }
-  // DAI has been removed as it doesn't exist on Base Sepolia
 };
+
+// Get ERC-6909 savings token balance
+export async function getSavingsTokenBalance(
+  userAddress: string,
+  tokenAddress: string
+): Promise<{
+  value: bigint;
+  formatted: string;
+}> {
+  const publicClient = createPublicClient({
+    chain: baseSepolia,
+    transport: http()
+  });
+
+  try {
+    // Get token ID for this token address
+    const tokenId = await publicClient.readContract({
+      address: CONTRACT_ADDRESSES.TOKEN,
+      abi: [
+        {
+          name: 'getTokenId',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'token', type: 'address' }],
+          outputs: [{ name: '', type: 'uint256' }]
+        }
+      ],
+      functionName: 'getTokenId',
+      args: [tokenAddress as Address]
+    });
+
+    // Get ERC-6909 balance
+    const balance = await publicClient.readContract({
+      address: CONTRACT_ADDRESSES.TOKEN,
+      abi: [
+        {
+          name: 'balanceOf',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'id', type: 'uint256' }
+          ],
+          outputs: [{ name: 'balance', type: 'uint256' }]
+        }
+      ],
+      functionName: 'balanceOf',
+      args: [userAddress as Address, tokenId as bigint]
+    });
+
+    return {
+      value: balance as bigint,
+      formatted: formatUnits(balance as bigint, 18)
+    };
+  } catch (error) {
+    console.error('Error fetching ERC-6909 balance:', error);
+    return {
+      value: BigInt(0),
+      formatted: '0'
+    };
+  }
+}
 
 // Create public client for fallback with better timeout and retry mechanism
 const publicClient = createPublicClient({
