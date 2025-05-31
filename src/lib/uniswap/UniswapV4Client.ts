@@ -266,13 +266,13 @@ export class UniswapV4Client {
   async detectNetwork(): Promise<void> {
     try {
       const network = await this.provider.getNetwork();
-      const chainId = network.chainId;
+      const chainId = Number(network.chainId);
       
       if (chainId !== 8453) {
         console.warn(`Connected to network: ${network.name} (${chainId}). Please switch to Base mainnet (8453)`);
         this.networkStatus = 'connected';
       } else {
-        console.log(`Connected to Base mainnet (${chainId})`);
+        console.log(`✅ Connected to Base mainnet (${chainId})`);
         this.networkStatus = 'connected';
       }
     } catch (error) {
@@ -284,7 +284,7 @@ export class UniswapV4Client {
   async validateNetworkOrThrow(): Promise<void> {
     try {
       const network = await this.provider.getNetwork();
-      const chainId = network.chainId;
+      const chainId = Number(network.chainId);
       
       if (chainId !== 8453) {
         throw new Error(`Wrong network: Connected to ${network.name} (${chainId}). Please switch to Base mainnet (8453).`);

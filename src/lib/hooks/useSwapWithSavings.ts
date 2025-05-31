@@ -641,7 +641,7 @@ export default function useSwapWithSavings(
     const SavingStrategyABI = await import('@/abi/savings/SavingStrategy.json');
     return new ethers.Contract(
       CONTRACT_ADDRESSES.SAVING_STRATEGY,
-      SavingStrategyABI.default,
+      SavingStrategyABI,
       signer
     );
   }, [signer]);
