@@ -26,114 +26,37 @@
   z-index: 50;
 }
 
-/* Connect Button */
+/* Connect Button Styling */
 .connect-wallet-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
-  color: white;
-  border: none;
-  border-radius: 0.75rem;
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  gap: 0.5rem;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0.75rem 1.5rem !important;
+  background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+  gap: 0.5rem !important;
 }
 
 .connect-wallet-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
 }
 
-/* Wallet Trigger Wrapper - Critical for dropdown functionality */
-.wallet-trigger-wrapper {
-  position: relative;
-  cursor: pointer;
-}
-
-/* Connected Wallet Display */
-.wallet-connected-display {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  background: rgba(17, 24, 39, 0.8);
-  border: 1px solid rgba(75, 85, 99, 0.3);
-  border-radius: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
-  min-height: 48px;
-}
-
-.wallet-connected-display:hover {
-  background: rgba(17, 24, 39, 0.9);
-  border-color: rgba(75, 85, 99, 0.5);
-}
-
-.wallet-balance {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: white;
-}
-
-.wallet-avatar {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.dropdown-indicator {
-  color: #9CA3AF;
-  font-size: 1rem;
-  transition: transform 0.2s ease;
-  flex-shrink: 0;
-}
-
-.wallet-connected-display:hover .dropdown-indicator {
-  transform: rotate(180deg);
-}
-
-/* Wallet Dropdown - Fixed positioning and visibility */
-[data-testid="ockWalletDropdown"] {
-  position: absolute !important;
-  top: calc(100% + 0.5rem) !important;
-  right: 0 !important;
-  left: auto !important;
-  z-index: 1000 !important;
-  min-width: 320px !important;
-  max-width: 400px !important;
+/* Custom Wallet Dropdown - MINIMAL overrides to avoid breaking functionality */
+.custom-wallet-dropdown {
+  min-width: 350px !important;
   background: #111827 !important;
   border: 1px solid #374151 !important;
   border-radius: 1rem !important;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
-  backdrop-filter: blur(10px) !important;
   overflow: hidden !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: all !important;
-  transform: translateY(0) !important;
-  margin: 0 !important;
-}
-
-/* Alternative selector for dropdown if the above doesn't work */
-.wallet-container [role="dialog"],
-.wallet-container [role="menu"] {
-  position: absolute !important;
-  top: calc(100% + 0.5rem) !important;
-  right: 0 !important;
-  z-index: 1000 !important;
-  min-width: 320px !important;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: 1rem !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Wallet Header */
@@ -151,11 +74,11 @@
 }
 
 .wallet-avatar-large {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
+  width: 3rem !important;
+  height: 3rem !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
 }
 
 .wallet-info {
@@ -471,28 +394,11 @@
   transform: translateY(-1px) !important;
 }
 
-/* OnchainKit component overrides */
-[data-testid="ockConnectWallet"] {
-  background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%) !important;
-  border: none !important;
-  border-radius: 0.75rem !important;
-  padding: 0.75rem 1.5rem !important;
-  font-weight: 600 !important;
-  transition: all 0.2s ease !important;
-}
-
-[data-testid="ockConnectWallet"]:hover {
-  transform: translateY(-2px) !important;
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
-}
-
 /* Responsive Design */
 @media (max-width: 640px) {
-  [data-testid="ockWalletDropdown"] {
-    right: -1rem !important;
-    left: -1rem !important;
-    min-width: auto !important;
-    max-width: none !important;
+  .custom-wallet-dropdown {
+    min-width: 300px !important;
+    max-width: 350px !important;
   }
   
   .action-group {
@@ -508,18 +414,12 @@
   }
 }
 
-/* Fix for potential OnchainKit styling conflicts */
-.wallet-container * {
-  box-sizing: border-box;
-}
-
 /* Ensure dropdown appears above other elements */
 .wallet-container {
   z-index: 50;
 }
 
-[data-testid="ockWalletDropdown"],
-.wallet-container [role="dialog"],
-.wallet-container [role="menu"] {
-  z-index: 1000 !important;
+/* Remove any conflicting global overrides */
+.wallet-container * {
+  box-sizing: border-box;
 }

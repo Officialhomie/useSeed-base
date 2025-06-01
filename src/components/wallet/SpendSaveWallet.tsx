@@ -236,29 +236,12 @@ export default function SpendSaveWallet() {
     <>
       <div className="wallet-container">
         <Wallet>
-          {!isConnected ? (
-            <ConnectWallet 
-              className="connect-wallet-button"
-              text="Connect Wallet"
-            />
-          ) : (
-            <div className="wallet-trigger-wrapper">
-              {/* This is the clickable trigger that will show/hide the dropdown */}
-              <div className="wallet-connected-display">
-                <div className="wallet-balance">
-                  <span>{ethBalance} ETH</span>
-                </div>
-                {address && (
-                  <Identity address={address}>
-                    <Avatar className="wallet-avatar" />
-                  </Identity>
-                )}
-                <FiChevronDown className="dropdown-indicator" />
-              </div>
-            </div>
-          )}
+          <ConnectWallet 
+            className="connect-wallet-button"
+            text="Connect Wallet"
+          />
           
-          <WalletDropdown>
+          <WalletDropdown className="custom-wallet-dropdown">
             {/* Wallet Header Section */}
             <div className="wallet-header">
               {address && (

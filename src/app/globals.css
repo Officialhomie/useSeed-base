@@ -204,6 +204,21 @@ body {
   box-shadow: 0 4px 28px rgba(59, 130, 246, 0.25);
 }
 
+/* MINIMAL OnchainKit Wallet styling - only what's necessary */
+[data-testid="ockConnectWallet"] {
+  background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%) !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  padding: 0.75rem 1.5rem !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-testid="ockConnectWallet"]:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
+}
+
 /* Loading spinner */
 .loading-container {
   display: flex;
@@ -304,9 +319,15 @@ body {
 }
 
 /* Ensure no parent elements are hiding the dropdown */
-body * {
+/* body * {
   overflow: visible;
+} */
+
+body {
+  overflow-x: hidden;
 }
+
+
 
 /* Exception for scroll containers */
 .overflow-auto,
