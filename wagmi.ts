@@ -1,6 +1,8 @@
 import { http, createConfig, fallback } from "wagmi";
 import { base, baseSepolia } from "wagmi/chains";
-import { coinbaseWallet } from "wagmi/connectors";
+import { coinbaseWallet, walletConnect, injected } from "wagmi/connectors";
+import myLogo from '@/resources/download.jpeg'
+
 
 // Enhanced connector with better error handling and configuration
 export const cbWalletConnector = coinbaseWallet({
@@ -148,6 +150,16 @@ export const config = createConfig({
   chains: [base], // Keep base first to prioritize it
   connectors: [
     cbWalletConnector,
+    walletConnect({ 
+      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+      metadata: {
+        name: 'SpendSave Protocol',
+        description: 'DeFi Savings Protocol',
+        url: 'https://use-seed-base.vercel.app/',
+        icons: ['@/resources/download.jpeg']
+      }
+    }),
+    injected()
   ],
   transports: {
     // [baseSepolia.id]: fallback(baseSepoliaTransports),
