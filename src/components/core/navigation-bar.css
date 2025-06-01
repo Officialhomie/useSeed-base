@@ -32,7 +32,7 @@
   pointer-events: none; /* Allow clicks to pass through the wrapper */
 }
 
-/* Main navbar container */
+/* Main navbar container - REMOVED overflow: hidden to allow dropdown */
 .spendSave-navbar {
   position: relative;
   width: 90%;
@@ -46,7 +46,7 @@
   box-shadow: var(--navbar-shadow);
   border: 1px solid var(--navbar-border);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow: hidden;
+  /* REMOVED: overflow: hidden; - This was preventing dropdown from showing */
   transform: translateY(0);
   pointer-events: auto; /* Re-enable pointer events for navbar */
   will-change: transform, box-shadow;
@@ -242,11 +242,13 @@
   box-shadow: 0 0 0 2px white, 0 0 0 4px var(--navbar-accent);
 }
 
-/* Navbar actions (contains wallet) */
+/* Navbar actions (contains wallet) - IMPORTANT: Allow overflow for dropdown */
 .navbar-actions {
   display: flex;
   align-items: center;
   gap: 1rem;
+  position: relative; /* Important for dropdown positioning */
+  z-index: 200; /* Ensure wallet dropdown appears above everything */
 }
 
 /* Stats banner */
@@ -387,4 +389,87 @@
     width: 92%;
     border-radius: 18px;
   }
-} 
+}
+
+/* Navigation Bar CSS Fix - Add to navigation-bar.css */
+
+/* Ensure navbar actions don't interfere with wallet dropdown */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+  z-index: 50; /* Lower than wallet dropdown */
+}
+
+/* Fix z-index stacking context for navbar */
+.spendSave-navbar {
+  position: relative;
+  width: 90%;
+  max-width: 1200px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: var(--navbar-bg);
+  border-radius: var(--navbar-radius);
+  z-index: 40; /* Lower than wallet container */
+  transition: var(--navbar-transition);
+  box-shadow: var(--navbar-shadow);
+  border: 1px solid var(--navbar-border);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: visible; /* Allow dropdown to show outside navbar */
+  transform: translateY(0);
+  pointer-events: auto;
+  will-change: transform, box-shadow;
+}
+
+/* Ensure navbar container doesn't clip the wallet dropdown */
+.navbar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  height: 64px;
+  overflow: visible; /* Allow dropdown to show outside */
+}
+
+/* Mobile menu should be lower z-index than wallet */
+.navbar-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .navbar-links {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 75%;
+    max-width: 280px;
+    height: 100vh;
+    background-color: var(--navbar-bg-scrolled);
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.2);
+    z-index: 30; /* Lower than wallet dropdown */
+    transition: right 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 5rem 1rem 2rem;
+    backdrop-filter: blur(10px);
+  }
+}
+
+/* Fix for any potential overflow issues */
+.navbar-container-wrapper {
+  position: absolute;
+  top: 1rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 40; /* Lower than wallet */
+  pointer-events: none;
+  overflow: visible; /* Allow wallet dropdown to show */
+}
+

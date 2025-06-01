@@ -5,12 +5,16 @@ import {
   ConnectWallet,
   Wallet,
   WalletDropdown,
+  WalletDropdownBasename,
   WalletDropdownDisconnect,
+  WalletDropdownFundLink,
+  WalletDropdownLink,
 } from '@coinbase/onchainkit/wallet';
 import {
   Avatar,
   Name,
   Identity,
+  Address,
 } from '@coinbase/onchainkit/identity';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { toast } from 'react-hot-toast';
@@ -25,7 +29,8 @@ import {
   FiCreditCard,
   FiUser,
   FiChevronDown,
-  FiUnlock
+  FiUnlock,
+  FiExternalLink
 } from 'react-icons/fi';
 import { useTokenBalances } from '@/lib/hooks/useTokenBalances';
 import { 
@@ -232,28 +237,28 @@ export default function SpendSaveWallet() {
       <div className="wallet-container">
         <Wallet>
           {!isConnected ? (
-            <button
-              onClick={() => setShowConnectorModal(true)}
+            <ConnectWallet 
               className="connect-wallet-button"
-            >
-              <FiUnlock className="mr-2" />
-              Connect Wallet
-            </button>
+              text="Connect Wallet"
+            />
           ) : (
-            <div className="wallet-connected-display">
-              <div className="wallet-balance">
-                <span>{ethBalance} ETH</span>
+            <div className="wallet-trigger-wrapper">
+              {/* This is the clickable trigger that will show/hide the dropdown */}
+              <div className="wallet-connected-display">
+                <div className="wallet-balance">
+                  <span>{ethBalance} ETH</span>
+                </div>
+                {address && (
+                  <Identity address={address}>
+                    <Avatar className="wallet-avatar" />
+                  </Identity>
+                )}
+                <FiChevronDown className="dropdown-indicator" />
               </div>
-              {address && (
-                <Identity address={address}>
-                  <Avatar className="wallet-avatar" />
-                </Identity>
-              )}
-              <FiChevronDown className="dropdown-indicator" />
             </div>
           )}
           
-          <WalletDropdown className="wallet-dropdown">
+          <WalletDropdown>
             {/* Wallet Header Section */}
             <div className="wallet-header">
               {address && (
@@ -265,7 +270,9 @@ export default function SpendSaveWallet() {
                     <Identity address={address}>
                       <Name className="wallet-name" />
                     </Identity>
-                    <AddressDisplay address={address} />
+                    <Identity address={address}>
+                      <Address className="wallet-address-text" />
+                    </Identity>
                     {connector && (
                       <div className="wallet-connector">
                         Connected via {connector.name}
@@ -354,15 +361,22 @@ export default function SpendSaveWallet() {
                 </div>
               </div>
             </div>
+
+            {/* OnchainKit default options */}
+            <WalletDropdownBasename />
+            <WalletDropdownLink 
+              icon="↗" 
+              href="https://keys.coinbase.com" 
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Wallet Settings
+            </WalletDropdownLink>
+            <WalletDropdownFundLink />
             
-            {/* Disconnect Button */}
+            {/* Custom Disconnect Button */}
             <div className="wallet-footer">
-              <button
-                onClick={handleDisconnect}
-                className="disconnect-button w-full py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
-              >
-                Disconnect Wallet
-              </button>
+              <WalletDropdownDisconnect className="disconnect-button" />
             </div>
           </WalletDropdown>
         </Wallet>

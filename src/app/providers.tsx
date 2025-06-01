@@ -1,6 +1,5 @@
 "use client";
 
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode, useEffect, useCallback } from "react";
 import { useSwitchChain, useAccount, useChainId, WagmiProvider } from "wagmi";
@@ -110,38 +109,6 @@ const NetworkValidator = ({ children }: { children: React.ReactNode }) => {
         isSwitching={isSwitching}
       />
     </>
-  );
-};
-
-// Non-blocking wallet connection indicator
-const WalletConnectionStatus = ({ status }: { status: 'connecting' | 'failed' | 'connected' | 'timeout' }): JSX.Element | null => {
-  if (status === 'connected') return null;
-  
-  return (
-    <div className="fixed top-4 right-4 z-50">
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-[1px] rounded-lg">
-        <div className="bg-black p-3 rounded-lg flex items-center space-x-2">
-          {status === 'connecting' && (
-            <div className="w-4 h-4 border-2 border-t-blue-500 border-r-transparent border-b-purple-500 border-l-transparent rounded-full animate-spin"></div>
-          )}
-          {status === 'failed' && (
-            <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          )}
-          {status === 'timeout' && (
-            <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          )}
-          <p className="text-white text-xs">
-            {status === 'connecting' && 'Connecting wallet...'}
-            {status === 'failed' && 'Wallet connection failed'}
-            {status === 'timeout' && 'Wallet connection delayed'}
-          </p>
-        </div>
-      </div>
-    </div>
   );
 };
 
@@ -268,15 +235,22 @@ export function Providers({ children }: { children: React.ReactNode }): JSX.Elem
           mode: 'auto',
           theme: 'default',
         },
+        wallet: {
+          display: 'modal', // Ensures proper modal behavior
+          termsUrl: 'https://use-seed-base.vercel.app/terms',
+          privacyUrl: 'https://use-seed-base.vercel.app/privacy',
+        },
       }}
     >
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
-          <NotificationProvider>
-            <NetworkValidator>
-              {children}
-            </NetworkValidator>
-          </NotificationProvider>
+          <ErrorBoundary fallback={<div>Something went wrong</div>}>
+            <NotificationProvider>
+              <NetworkValidator>
+                {children}
+              </NetworkValidator>
+            </NotificationProvider>
+          </ErrorBoundary>
         </QueryClientProvider>
       </WagmiProvider>
     </OnchainKitProvider>

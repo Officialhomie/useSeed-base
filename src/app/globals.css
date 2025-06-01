@@ -253,3 +253,69 @@ body {
   background: rgba(255, 255, 255, 0.1);
   transform: translateY(-2px);
 }
+
+
+/* Add this to your global CSS file (globals.css or equivalent) */
+
+/* OnchainKit Wallet Dropdown Fixes */
+[data-onchainkit] {
+  z-index: 9999 !important;
+}
+
+/* Ensure wallet dropdown is visible and positioned correctly */
+[data-onchainkit-wallet-dropdown] {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  z-index: 9999 !important;
+  background: rgb(17, 24, 39) !important;
+  border: 1px solid rgb(55, 65, 81) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  min-width: 320px !important;
+  max-width: 400px !important;
+}
+
+/* Fix any overflow issues that might hide the dropdown */
+.navbar-container,
+.navbar-actions,
+.wallet-container {
+  overflow: visible !important;
+}
+
+/* Ensure OnchainKit components have proper styling */
+[data-onchainkit-wallet] {
+  position: relative !important;
+}
+
+/* Override any conflicting Tailwind or custom styles */
+.ock-wallet-dropdown {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  z-index: 9999 !important;
+}
+
+/* Force visibility for debugging */
+[data-onchainkit-wallet-dropdown]:not([hidden]) {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure no parent elements are hiding the dropdown */
+body * {
+  overflow: visible;
+}
+
+/* Exception for scroll containers */
+.overflow-auto,
+.overflow-scroll,
+.overflow-x-auto,
+.overflow-y-auto {
+  overflow: auto;
+}
+
+.overflow-hidden {
+  overflow: visible !important;
+}
