@@ -12,6 +12,32 @@ export const cbWalletConnector = coinbaseWallet({
   chainId: base.id, // Default to Base mainnet
 });
 
+// WalletConnect connector
+export const walletConnectConnector = walletConnect({
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!, // You'll need to get this from WalletConnect Cloud
+  metadata: {
+    name: 'SpendSave Protocol',
+    description: 'DeFi Savings Protocol on Base',
+    url: typeof window !== 'undefined' ? window.location.origin : 'https://use-seed-base.vercel.app',
+    icons: ['@/resources/download.jpeg']
+  },
+  showQrModal: true,
+});
+
+// Injected connector for MetaMask and other browser wallets
+export const injectedConnector = injected({
+  target: 'metaMask',
+});
+
+// Generic injected connector for other wallets
+export const genericInjectedConnector = injected({
+  target: () => ({
+    id: 'injected',
+    name: 'Browser Wallet',
+    provider: typeof window !== 'undefined' ? window.ethereum : undefined,
+  }),
+});
+
 // Configure debugger for development
 function setupDebugger() {
   if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
@@ -97,12 +123,6 @@ const baseSepoliaTransports = [
     }
   }),
   
-  // Removing the problematic DRPC endpoint
-  // http('https://lb.drpc.org/ogrpc?network=base-sepolia', {
-  //   timeout: 15000,
-  //   fetchOptions: { mode: 'cors', cache: 'no-cache' },
-  // }),
-  
   // Tenderly gateway
   http('https://base-sepolia.gateway.tenderly.co', {
     timeout: 15000,
@@ -150,19 +170,11 @@ export const config = createConfig({
   chains: [base], // Keep base first to prioritize it
   connectors: [
     cbWalletConnector,
-    walletConnect({ 
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
-      metadata: {
-        name: 'SpendSave Protocol',
-        description: 'DeFi Savings Protocol',
-        url: 'https://use-seed-base.vercel.app/',
-        icons: ['@/resources/download.jpeg']
-      }
-    }),
-    injected()
+    injectedConnector, // MetaMask
+    genericInjectedConnector, // Other browser wallets
+    walletConnectConnector, // WalletConnect
   ],
   transports: {
-    // [baseSepolia.id]: fallback(baseSepoliaTransports),
     [base.id]: fallback(baseMainnetTransports)
   },
 });

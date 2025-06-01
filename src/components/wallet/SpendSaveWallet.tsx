@@ -12,8 +12,7 @@ import {
   Name,
   Identity,
 } from '@coinbase/onchainkit/identity';
-import { useAccount } from 'wagmi';
-import { formatUnits } from 'viem';
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { toast } from 'react-hot-toast';
 import { 
   FiCopy, 
@@ -24,10 +23,93 @@ import {
   FiArrowRight,
   FiArrowUpRight,
   FiCreditCard,
-  FiUser
+  FiUser,
+  FiChevronDown,
+  FiUnlock
 } from 'react-icons/fi';
 import { useTokenBalances } from '@/lib/hooks/useTokenBalances';
+import { 
+  cbWalletConnector, 
+  injectedConnector, 
+  walletConnectConnector,
+  genericInjectedConnector 
+} from '../../../wagmi';
 import './spendsave-wallet.css';
+
+// Connector Selection Modal
+const ConnectorModal = ({ 
+  isOpen, 
+  onClose, 
+  onConnect 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConnect: (connector: any) => void;
+}) => {
+  if (!isOpen) return null;
+
+  const connectors = [
+    {
+      connector: cbWalletConnector,
+      name: 'Coinbase Wallet',
+      icon: '🔵',
+      description: 'Connect with Coinbase Wallet'
+    },
+    {
+      connector: injectedConnector,
+      name: 'MetaMask',
+      icon: '🦊',
+      description: 'Connect with MetaMask'
+    },
+    {
+      connector: walletConnectConnector,
+      name: 'WalletConnect',
+      icon: '🔗',
+      description: 'Scan QR code with your wallet'
+    },
+    {
+      connector: genericInjectedConnector,
+      name: 'Browser Wallet',
+      icon: '🌐',
+      description: 'Connect with any browser wallet'
+    }
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-gray-900 rounded-xl p-6 max-w-md mx-4 border border-gray-800" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-white">Connect Wallet</h3>
+          <button 
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        
+        <div className="space-y-3">
+          {connectors.map((item, index) => (
+            <button
+              key={index}
+              onClick={() => {
+                onConnect(item.connector);
+                onClose();
+              }}
+              className="w-full p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors flex items-center space-x-4"
+            >
+              <span className="text-2xl">{item.icon}</span>
+              <div className="text-left">
+                <div className="font-semibold text-white">{item.name}</div>
+                <div className="text-sm text-gray-400">{item.description}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Address display with copy function
 const AddressDisplay = ({ address }: { address: `0x${string}` | undefined }) => {
@@ -40,6 +122,7 @@ const AddressDisplay = ({ address }: { address: `0x${string}` | undefined }) => 
   const copyAddress = () => {
     navigator.clipboard.writeText(address);
     setCopied(true);
+    toast.success('Address copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
   };
   
@@ -105,10 +188,28 @@ const ActionButton = ({
 
 // Main SpendSaveWallet Component
 export default function SpendSaveWallet() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
+  const { connect } = useConnect();
+  const { disconnect } = useDisconnect();
   const { tokenBalances } = useTokenBalances();
+  const [showConnectorModal, setShowConnectorModal] = useState(false);
+  
   const ethBalance = tokenBalances?.ETH?.formattedBalance || '0.00';
   const usdcBalance = tokenBalances?.USDC?.formattedBalance || '0.00';
+  
+  const handleConnect = (selectedConnector: any) => {
+    try {
+      connect({ connector: selectedConnector });
+    } catch (error) {
+      console.error('Connection error:', error);
+      toast.error('Failed to connect wallet');
+    }
+  };
+  
+  const handleDisconnect = () => {
+    disconnect();
+    toast.success('Wallet disconnected');
+  };
   
   const handleDeposit = () => {
     toast.success('Deposit feature coming soon');
@@ -127,128 +228,152 @@ export default function SpendSaveWallet() {
   };
 
   return (
-    <div className="wallet-container">
-      <Wallet>
-        {!isConnected ? (
-          <ConnectWallet className="connect-wallet-button">
-            + Connect Wallet
-          </ConnectWallet>
-        ) : (
-          <div className="wallet-connected-display">
-            <div className="wallet-balance">
-              <span>{ethBalance} ETH</span>
-            </div>
-            {address && (
-              <Identity address={address}>
-                <Avatar className="wallet-avatar" />
-              </Identity>
-            )}
-          </div>
-        )}
-        
-        <WalletDropdown className="wallet-dropdown">
-          {/* Wallet Header Section */}
-          <div className="wallet-header">
-            {address && (
-              <div className="wallet-identity">
+    <>
+      <div className="wallet-container">
+        <Wallet>
+          {!isConnected ? (
+            <button
+              onClick={() => setShowConnectorModal(true)}
+              className="connect-wallet-button"
+            >
+              <FiUnlock className="mr-2" />
+              Connect Wallet
+            </button>
+          ) : (
+            <div className="wallet-connected-display">
+              <div className="wallet-balance">
+                <span>{ethBalance} ETH</span>
+              </div>
+              {address && (
                 <Identity address={address}>
-                  <Avatar className="wallet-avatar-large" />
+                  <Avatar className="wallet-avatar" />
                 </Identity>
-                <div className="wallet-info">
+              )}
+              <FiChevronDown className="dropdown-indicator" />
+            </div>
+          )}
+          
+          <WalletDropdown className="wallet-dropdown">
+            {/* Wallet Header Section */}
+            <div className="wallet-header">
+              {address && (
+                <div className="wallet-identity">
                   <Identity address={address}>
-                    <Name className="wallet-name" />
+                    <Avatar className="wallet-avatar-large" />
                   </Identity>
-                  <AddressDisplay address={address} />
+                  <div className="wallet-info">
+                    <Identity address={address}>
+                      <Name className="wallet-name" />
+                    </Identity>
+                    <AddressDisplay address={address} />
+                    {connector && (
+                      <div className="wallet-connector">
+                        Connected via {connector.name}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Main Balance Display */}
-            <div className="wallet-main-balance">
-              <FiUser className="balance-icon" />
-              <div className="balance-info">
-                <div className="balance-label">Total Balance</div>
-                <div className="balance-value">{ethBalance} ETH</div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Quick Actions Section */}
-          <div className="wallet-actions">
-            <div className="action-group">
-              <ActionButton 
-                label="Deposit" 
-                icon={<FiPlus />} 
-                onClick={handleDeposit}
-                variant="primary"
-              />
-              <ActionButton 
-                label="Withdraw" 
-                icon={<FiMinus />} 
-                onClick={handleWithdraw}
-                variant="secondary"
-              />
-              <ActionButton 
-                label="Swap" 
-                icon={<FiArrowRight />} 
-                onClick={handleSwap}
-                variant="tertiary"
-              />
-              <ActionButton 
-                label="Buy" 
-                icon={<FiCreditCard />} 
-                onClick={handleBuy}
-                variant="secondary"
-              />
-            </div>
-          </div>
-          
-          {/* Token Balances Section */}
-          <div className="wallet-tokens">
-            <h3 className="section-title">Your Assets</h3>
-            <div className="token-list">
-              <TokenDisplay 
-                symbol="ETH" 
-                name="Ethereum" 
-                balance={ethBalance}
-                icon={<span className="token-symbol">Ξ</span>}
-              />
+              )}
               
-              <TokenDisplay 
-                symbol="USDC" 
-                name="USD Coin" 
-                balance={usdcBalance}
-                icon={<span className="token-symbol">$</span>}
-              />
-            </div>
-          </div>
-          
-          {/* Portfolio Section */}
-          <div className="wallet-portfolio">
-            <div className="portfolio-header">
-              <h3 className="section-title">Portfolio</h3>
-              <a href="/dashboard" className="view-all">
-                View all <FiArrowUpRight />
-              </a>
-            </div>
-            
-            <div className="portfolio-stats">
-              <div className="stat">
-                <FiPieChart className="stat-icon" />
-                <div className="stat-details">
-                  <div className="stat-label">Total Savings</div>
-                  <div className="stat-value">$142.50</div>
+              {/* Main Balance Display */}
+              <div className="wallet-main-balance">
+                <FiUser className="balance-icon" />
+                <div className="balance-info">
+                  <div className="balance-label">Total Balance</div>
+                  <div className="balance-value">{ethBalance} ETH</div>
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Disconnect Button */}
-          <div className="wallet-footer">
-            <WalletDropdownDisconnect className="disconnect-button" />
-          </div>
-        </WalletDropdown>
-      </Wallet>
-    </div>
+            
+            {/* Quick Actions Section */}
+            <div className="wallet-actions">
+              <div className="action-group">
+                <ActionButton 
+                  label="Deposit" 
+                  icon={<FiPlus />} 
+                  onClick={handleDeposit}
+                  variant="primary"
+                />
+                <ActionButton 
+                  label="Withdraw" 
+                  icon={<FiMinus />} 
+                  onClick={handleWithdraw}
+                  variant="secondary"
+                />
+                <ActionButton 
+                  label="Swap" 
+                  icon={<FiArrowRight />} 
+                  onClick={handleSwap}
+                  variant="tertiary"
+                />
+                <ActionButton 
+                  label="Buy" 
+                  icon={<FiCreditCard />} 
+                  onClick={handleBuy}
+                  variant="secondary"
+                />
+              </div>
+            </div>
+            
+            {/* Token Balances Section */}
+            <div className="wallet-tokens">
+              <h3 className="section-title">Your Assets</h3>
+              <div className="token-list">
+                <TokenDisplay 
+                  symbol="ETH" 
+                  name="Ethereum" 
+                  balance={ethBalance}
+                  icon={<span className="token-symbol">Ξ</span>}
+                />
+                
+                <TokenDisplay 
+                  symbol="USDC" 
+                  name="USD Coin" 
+                  balance={usdcBalance}
+                  icon={<span className="token-symbol">$</span>}
+                />
+              </div>
+            </div>
+            
+            {/* Portfolio Section */}
+            <div className="wallet-portfolio">
+              <div className="portfolio-header">
+                <h3 className="section-title">Portfolio</h3>
+                <a href="/dashboard" className="view-all">
+                  View all <FiArrowUpRight />
+                </a>
+              </div>
+              
+              <div className="portfolio-stats">
+                <div className="stat">
+                  <FiPieChart className="stat-icon" />
+                  <div className="stat-details">
+                    <div className="stat-label">Total Savings</div>
+                    <div className="stat-value">$142.50</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Disconnect Button */}
+            <div className="wallet-footer">
+              <button
+                onClick={handleDisconnect}
+                className="disconnect-button w-full py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+              >
+                Disconnect Wallet
+              </button>
+            </div>
+          </WalletDropdown>
+        </Wallet>
+      </div>
+
+      {/* Connector Selection Modal */}
+      <ConnectorModal
+        isOpen={showConnectorModal}
+        onClose={() => setShowConnectorModal(false)}
+        onConnect={handleConnect}
+      />
+    </>
   );
-} 
+}

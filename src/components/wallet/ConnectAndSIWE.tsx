@@ -4,7 +4,69 @@ import { useCallback, useEffect, useState } from "react";
 import type { Hex } from "viem";
 import { useAccount, useConnect, usePublicClient, useSignMessage, useDisconnect } from "wagmi";
 import { SiweMessage } from "siwe";
-import { cbWalletConnector, isSmartWalletUser } from "../../../wagmi";
+import { 
+  cbWalletConnector, 
+  injectedConnector, 
+  walletConnectConnector,
+  genericInjectedConnector,
+  isSmartWalletUser 
+} from "../../../wagmi";
+
+// Connector Selection Component
+const ConnectorSelection = ({ onSelect, loading }: { 
+  onSelect: (connector: any) => void;
+  loading: boolean;
+}): JSX.Element => {
+  const connectors = [
+    {
+      connector: cbWalletConnector,
+      name: 'Coinbase Wallet',
+      icon: '🔵',
+      description: 'Connect with Coinbase Wallet (supports Smart Wallets)'
+    },
+    {
+      connector: injectedConnector,
+      name: 'MetaMask',
+      icon: '🦊',
+      description: 'Connect with MetaMask browser extension'
+    },
+    {
+      connector: walletConnectConnector,
+      name: 'WalletConnect',
+      icon: '🔗',
+      description: 'Scan QR code with your mobile wallet'
+    },
+    {
+      connector: genericInjectedConnector,
+      name: 'Browser Wallet',
+      icon: '🌐',
+      description: 'Connect with any injected browser wallet'
+    }
+  ];
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-lg font-semibold text-white mb-4">Choose your wallet</h3>
+      {connectors.map((item, index) => (
+        <button
+          key={index}
+          onClick={() => onSelect(item.connector)}
+          disabled={loading}
+          className="w-full p-4 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all duration-200 flex items-center space-x-4 border border-gray-700 hover:border-gray-600"
+        >
+          <span className="text-2xl">{item.icon}</span>
+          <div className="text-left flex-1">
+            <div className="font-semibold text-white">{item.name}</div>
+            <div className="text-sm text-gray-400">{item.description}</div>
+          </div>
+          {loading && (
+            <div className="w-5 h-5 border-2 border-t-white border-r-transparent border-b-white border-l-transparent rounded-full animate-spin"></div>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+};
 
 const ConnectButton = ({ onClick, loading }: { onClick: () => void; loading: boolean }): JSX.Element => (
   <button
@@ -41,11 +103,13 @@ const StatusCard = ({
   address, 
   isValid, 
   isSmartWallet,
+  connectorName,
   onDisconnect,
 }: { 
   address: string; 
   isValid?: boolean; 
   isSmartWallet: boolean;
+  connectorName?: string;
   onDisconnect: () => void;
 }): JSX.Element => (
   <div className="mt-6 bg-gray-900 rounded-xl p-5 border border-gray-800 shadow-lg max-w-md w-full">
@@ -53,6 +117,9 @@ const StatusCard = ({
       <div>
         <h3 className="text-lg font-semibold text-white">Wallet Connected</h3>
         <p className="text-gray-400 text-sm">You&apos;re signed in with your wallet</p>
+        {connectorName && (
+          <p className="text-gray-500 text-xs mt-1">via {connectorName}</p>
+        )}
       </div>
       <div className="flex items-center">
         <span className={`inline-flex h-3 w-3 rounded-full mr-2 ${isValid ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
@@ -107,6 +174,8 @@ const StatusCard = ({
 export function ConnectAndSIWE(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConnectors, setShowConnectors] = useState(false);
+  
   const { connect } = useConnect({
     mutation: {
       onMutate: () => {
@@ -132,7 +201,7 @@ export function ConnectAndSIWE(): JSX.Element {
             chainId,
             uri: document.location.origin,
             version: "1",
-            statement: "Sign in to SpendSave Protocol with your Smart Wallet",
+            statement: "Sign in to SpendSave Protocol with your Wallet",
             nonce,
           });
           
@@ -188,6 +257,11 @@ export function ConnectAndSIWE(): JSX.Element {
     }
   }, [signature, account.address, client, message]);
 
+  const handleConnectorSelect = (connector: any) => {
+    setShowConnectors(false);
+    connect({ connector });
+  };
+
   const handleDisconnect = () => {
     disconnect();
     setSignature(undefined);
@@ -211,10 +285,25 @@ export function ConnectAndSIWE(): JSX.Element {
     <div className="flex flex-col items-center space-y-4">
       {!account.address ? (
         <>
-          <ConnectButton 
-            onClick={() => connect({ connector: cbWalletConnector })} 
-            loading={loading}
-          />
+          {!showConnectors ? (
+            <ConnectButton 
+              onClick={() => setShowConnectors(true)} 
+              loading={loading}
+            />
+          ) : (
+            <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 max-w-md w-full">
+              <ConnectorSelection 
+                onSelect={handleConnectorSelect}
+                loading={loading}
+              />
+              <button 
+                onClick={() => setShowConnectors(false)}
+                className="mt-4 text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                ← Back
+              </button>
+            </div>
+          )}
           
           {error && (
             <div className="mt-4 p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm max-w-md">
@@ -232,9 +321,10 @@ export function ConnectAndSIWE(): JSX.Element {
           address={account.address} 
           isValid={valid}
           isSmartWallet={isSmartWallet}
+          connectorName={account.connector?.name}
           onDisconnect={handleDisconnect}
         />
       )}
     </div>
   );
-} 
+}
