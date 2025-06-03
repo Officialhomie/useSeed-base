@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: MIT
-// src/lib/gas/gasOracle.ts
-
 import { ethers } from 'ethers'
 
 /**

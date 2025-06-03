@@ -219,6 +219,70 @@ body {
   box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
 }
 
+/* OnchainKit Wallet Dropdown Positioning and Scrolling Fixes */
+[data-testid="ockWalletDropdown"] {
+  position: absolute !important;
+  top: calc(100% + 0.5rem) !important; /* Better spacing from trigger */
+  right: 0 !important;
+  left: auto !important;
+  z-index: 1000 !important;
+  min-width: 350px !important;
+  max-width: 400px !important;
+  max-height: 80vh !important; /* Limit height to viewport */
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(10px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scroll-behavior: smooth !important;
+  /* Prevent dropdown from going off-screen */
+  transform: translateY(0) !important;
+  margin: 0 !important;
+}
+
+/* Alternative selector for wallet dropdown */
+[data-onchainkit-wallet-dropdown] {
+  position: absolute !important;
+  top: calc(100% + 0.5rem) !important;
+  right: 0 !important;
+  z-index: 1000 !important;
+  min-width: 350px !important;
+  max-width: 400px !important;
+  max-height: 80vh !important;
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scroll-behavior: smooth !important;
+}
+
+/* Custom scrollbar for OnchainKit dropdown */
+[data-testid="ockWalletDropdown"]::-webkit-scrollbar,
+[data-onchainkit-wallet-dropdown]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-testid="ockWalletDropdown"]::-webkit-scrollbar-track,
+[data-onchainkit-wallet-dropdown]::-webkit-scrollbar-track {
+  background: #1F2937;
+  border-radius: 3px;
+}
+
+[data-testid="ockWalletDropdown"]::-webkit-scrollbar-thumb,
+[data-onchainkit-wallet-dropdown]::-webkit-scrollbar-thumb {
+  background: #4B5563;
+  border-radius: 3px;
+}
+
+[data-testid="ockWalletDropdown"]::-webkit-scrollbar-thumb:hover,
+[data-onchainkit-wallet-dropdown]::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
 /* Loading spinner */
 .loading-container {
   display: flex;
@@ -327,6 +391,18 @@ body {
   overflow-x: hidden;
 }
 
+@media (max-width: 640px) {
+  [data-testid="ockWalletDropdown"],
+  [data-onchainkit-wallet-dropdown] {
+    min-width: 300px !important;
+    max-width: 350px !important;
+    max-height: 75vh !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    margin-top: 0.5rem !important;
+  }
+}
 
 
 /* Exception for scroll containers */
