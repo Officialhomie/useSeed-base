@@ -5,17 +5,14 @@ import EnhancedUserExperience from '@/components/ui/EnhancedUserExperience';
 import NavigationBar from '@/components/core/NavigationBar';
 
 export default function EnhancedExperiencePage() {
-  // Handle client-side hydration
-  const [isClient, setIsClient] = useState(false);
-  
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
-    setIsClient(true);
+    setMounted(true);
   }, []);
-  
-  if (!isClient) {
-    return null;
-  }
-  
+
+  if (!mounted) return null;
+
   return (
     <div className="min-h-screen bg-background">
       <NavigationBar />

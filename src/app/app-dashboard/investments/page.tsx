@@ -67,6 +67,12 @@ export default function InvestmentsDashboard() {
     address: address as Address | undefined,
   });
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <div className="loading-container">Loading...</div>;
+
   // Example investments
   const investments = [
     {
@@ -97,13 +103,6 @@ export default function InvestmentsDashboard() {
       riskLevel: "high" as const
     },
   ];
-
-  // Handle hydration
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return <div className="loading-container">Loading...</div>;
 
   return (
     <DashboardLayout>

@@ -13,7 +13,13 @@ export default function PortfolioDashboard() {
   const [portfolioValue, setPortfolioValue] = useState('15,450.78');
   const [portfolioChange, setPortfolioChange] = useState('+2.34');
   const { isConnected } = useAccount();
-  
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <div className="loading-container">Loading...</div>;
+
   const assets = [
     { name: "Ethereum", symbol: "ETH", balance: "2.45", value: 4532.50, price: 1850, change: "+2.5", color: "#627EEA" },
     { name: "Bitcoin", symbol: "BTC", balance: "0.15", value: 4485.00, price: 29900, change: "+1.2", color: "#F7931A" },
@@ -39,13 +45,6 @@ export default function PortfolioDashboard() {
     value: asset.value,
     color: asset.color
   }));
-
-  // Handle hydration
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
-  if (!mounted) return <div className="loading-container">Loading...</div>;
   
   const totalValue = assets.reduce((acc, asset) => acc + asset.value, 0);
   

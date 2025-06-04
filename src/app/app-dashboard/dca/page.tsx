@@ -7,7 +7,6 @@ import DCAComponent from '@/components/trading/dca/DCAComponent';
 export default function DCADashboard() {
   const [mounted, setMounted] = useState(false);
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);

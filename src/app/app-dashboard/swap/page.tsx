@@ -6,10 +6,9 @@ import SwapWithSavings from '@/components/trading/swap/SwapWithSavings';
 import DashboardLayout from '@/components/core/DashboardLayout';
 
 export default function SwapPage() {
-  const { address } = useAccount();
   const [mounted, setMounted] = useState(false);
+  const { address } = useAccount();
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);

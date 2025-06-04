@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { Address } from 'viem'
 import { useWriteContract } from 'wagmi'
 import { CONTRACT_ADDRESSES } from '@/lib/contracts'
-import slippageControlAbi from '@/ABI/SlippageControl.json'
+import slippageControlAbi from '@/abi/trading/SlippageControl.json'
 
 export function useSetSlippageTolerance() {
   const {

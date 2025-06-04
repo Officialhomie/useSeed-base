@@ -21,17 +21,15 @@ export default function SettingsDashboard() {
   const [language, setLanguage] = useState('english');
   const [slippageTolerance, setSlippageTolerance] = useState(0.5);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);
-  
+
   if (!mounted) return <div className="loading-container">Loading...</div>;
-  
+
   const handleSave = () => {
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);

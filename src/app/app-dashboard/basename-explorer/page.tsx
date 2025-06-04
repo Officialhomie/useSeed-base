@@ -8,7 +8,6 @@ import '@/components/ui/basename-explorer.css';
 export default function BasenameExplorerPage() {
   const [mounted, setMounted] = useState(false);
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);

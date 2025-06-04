@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 export default function OnboardingPage() {
   const [mounted, setMounted] = useState(false);
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);

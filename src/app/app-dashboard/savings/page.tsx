@@ -47,7 +47,6 @@ export default function SavingsDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'savings'>('overview');
 
-  // Handle hydration and initialization
   useEffect(() => {
     const initializePage = async () => {
       try {

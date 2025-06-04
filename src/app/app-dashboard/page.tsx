@@ -7,15 +7,21 @@ import DashboardOverview from '@/components/savings/overview/DashboardOverview';
 import './dashboard.css';
 
 export default function AppDashboard() {
-  const { address } = useAccount();
   const [mounted, setMounted] = useState(false);
+  const { address } = useAccount();
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) return <div className="loading-container">Loading...</div>;
+  if (!mounted) return (
+    <div className="flex items-center justify-center h-full">
+      <div className="bg-gray-900/60 backdrop-blur-md border border-gray-800 rounded-xl p-6 flex items-center space-x-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="text-white">Loading dashboard...</p>
+      </div>
+    </div>
+  );
 
   return (
     <DashboardLayout>

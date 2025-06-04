@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import SlippageControlABI from "@/ABI/SlippageControl.json";
-import TokenABI from "@/ABI/Token.json";
+import SlippageControlABI from "@/abi/trading/SlippageControl.json";
+import TokenABI from "@/abi/tokens/Token.json";
 
 export default function SlippageSettings() {
   const { address } = useAccount();

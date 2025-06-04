@@ -11,7 +11,6 @@ export default function StakingDashboard() {
   const [activeTab, setActiveTab] = useState('myStakes');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
   }, []);
