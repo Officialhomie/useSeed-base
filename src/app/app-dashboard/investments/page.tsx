@@ -5,6 +5,22 @@ import DashboardLayout from '@/components/core/DashboardLayout';
 import { useAccount, useBalance } from 'wagmi';
 import { Address } from 'viem';
 
+function useClientWagmi() {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Only call wagmi hooks after mounting
+  const account = mounted ? useAccount() : { address: undefined };
+  const balance = mounted ? useBalance({
+    address: account.address as Address | undefined,
+  }) : { data: undefined };
+
+  return { ...account, balance: balance.data, mounted };
+}
+
 // Investment Strategy Card Component
 const InvestmentStrategyCard = ({ 
   title, 
@@ -61,18 +77,15 @@ const InvestmentStrategyCard = ({
 };
 
 export default function InvestmentsDashboard() {
-  const [mounted, setMounted] = useState(false);
-  const { address } = useAccount();
-  const { data: ethBalance } = useBalance({
-    address: address as Address | undefined,
-  });
+  const [localMounted, setLocalMounted] = useState(false);
+  const { address, balance, mounted: wagmiMounted } = useClientWagmi();
 
   useEffect(() => {
-    setMounted(true);
+    setLocalMounted(true);
   }, []);
 
-  if (!mounted) return <div className="loading-container">Loading...</div>;
-
+  if (!localMounted || !wagmiMounted) return <div className="loading-container">Loading...</div>;
+  
   // Example investments
   const investments = [
     {

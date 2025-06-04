@@ -7,18 +7,31 @@ import { motion } from 'framer-motion';
 import { FiArrowUp, FiArrowDown, FiDollarSign, FiActivity, FiPieChart } from 'react-icons/fi';
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, AreaChart, Area } from 'recharts';
 
-export default function PortfolioDashboard() {
+function useClientWagmi() {
   const [mounted, setMounted] = useState(false);
-  const [timeRange, setTimeRange] = useState('1W');
-  const [portfolioValue, setPortfolioValue] = useState('15,450.78');
-  const [portfolioChange, setPortfolioChange] = useState('+2.34');
-  const { isConnected } = useAccount();
-
+  
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) return <div className="loading-container">Loading...</div>;
+  const account = mounted ? useAccount() : { isConnected: false };
+  return { ...account, mounted };
+}
+
+
+export default function PortfolioDashboard() {
+  const [localMounted, setLocalMounted] = useState(false);
+  const [timeRange, setTimeRange] = useState('1W');
+  const [portfolioValue, setPortfolioValue] = useState('15,450.78');
+  const [portfolioChange, setPortfolioChange] = useState('+2.34');
+  const { isConnected, mounted: wagmiMounted } = useClientWagmi();
+
+  useEffect(() => {
+    setLocalMounted(true);
+  }, []);
+
+  if (!localMounted || !wagmiMounted) return <div className="loading-container">Loading...</div>;
+  
 
   const assets = [
     { name: "Ethereum", symbol: "ETH", balance: "2.45", value: 4532.50, price: 1850, change: "+2.5", color: "#627EEA" },

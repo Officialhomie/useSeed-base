@@ -5,16 +5,27 @@ import { useAccount } from 'wagmi';
 import SwapWithSavings from '@/components/trading/swap/SwapWithSavings';
 import DashboardLayout from '@/components/core/DashboardLayout';
 
-export default function SwapPage() {
+function useClientWagmi() {
   const [mounted, setMounted] = useState(false);
-  const { address } = useAccount();
-
+  
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) return <div className="loading-container">Loading...</div>;
+  const account = mounted ? useAccount() : { address: undefined };
+  return { ...account, mounted };
+}
 
+export default function SwapPage() {
+  const [localMounted, setLocalMounted] = useState(false);
+  const { address, mounted: wagmiMounted } = useClientWagmi();
+
+  useEffect(() => {
+    setLocalMounted(true);
+  }, []);
+
+  if (!localMounted || !wagmiMounted) return <div className="loading-container">Loading...</div>;
+  
   return (
     <DashboardLayout>
       <main className="flex flex-col w-full max-w-4xl mx-auto">

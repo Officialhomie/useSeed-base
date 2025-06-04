@@ -5,6 +5,12 @@ const nextConfig = {
     domains: [],
     unoptimized: false,
   },
+  experimental: {
+    esmExternals: 'loose',
+  },
+  async generateStaticParams() {
+    return [];
+  },
   
   // Configure headers for CORS and security
   async headers() {
