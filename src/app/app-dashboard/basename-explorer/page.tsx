@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/core/DashboardLayout';
 import BasenameExplorer from '@/components/ui/BasenameExplorer';
 import '@/components/ui/basename-explorer.css';
+import ClientOnly from '@/components/utils/ClientOnly';
 
 export default function BasenameExplorerPage() {
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <BasenameExplorerPageContent />
+    </ClientOnly>
+  );
+}
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return <div className="loading-container">Loading...</div>;
-
+function BasenameExplorerPageContent() {
   return (
     <DashboardLayout>
       <main className="p-4 md:p-8 overflow-auto h-full">
@@ -23,4 +24,4 @@ export default function BasenameExplorerPage() {
       </main>
     </DashboardLayout>
   );
-} 
+}

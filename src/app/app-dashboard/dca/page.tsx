@@ -3,16 +3,17 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/core/DashboardLayout';
 import DCAComponent from '@/components/trading/dca/DCAComponent';
+import ClientOnly from '@/components/utils/ClientOnly';
 
 export default function DCADashboard() {
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <DCADashboardContent />
+    </ClientOnly>
+  );
+}
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return <div className="loading-container">Loading...</div>;
-
+function DCADashboardContent() {
   return (
     <DashboardLayout>
       <main className="p-6 overflow-auto h-full">
@@ -21,4 +22,4 @@ export default function DCADashboard() {
       </main>
     </DashboardLayout>
   );
-} 
+}

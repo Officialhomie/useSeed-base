@@ -3,15 +3,17 @@
 import { useState, useEffect } from 'react';
 import EnhancedUserExperience from '@/components/ui/EnhancedUserExperience';
 import NavigationBar from '@/components/core/NavigationBar';
+import ClientOnly from '@/components/utils/ClientOnly';
 
 export default function EnhancedExperiencePage() {
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <EnhancedExperiencePageContent />
+    </ClientOnly>
+  );
+}
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
+function EnhancedExperiencePageContent() {
 
   return (
     <div className="min-h-screen bg-background">

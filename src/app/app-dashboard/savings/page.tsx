@@ -6,6 +6,8 @@ import SavingsComponent from '@/components/savings/actions/SavingsComponent';
 import SavingsOverview from '@/components/savings/overview/SavingsOverview';
 import { motion } from 'framer-motion';
 import { FiTrendingUp, FiClock, FiCheckCircle } from 'react-icons/fi';
+import ClientOnly from '@/components/utils/ClientOnly';
+
 
 // Feature card component
 const FeatureCard = ({ icon, title, description, color }: { 
@@ -42,7 +44,14 @@ const FeatureCard = ({ icon, title, description, color }: {
 };
 
 export default function SavingsDashboard() {
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <SavingsDashboardContent />
+    </ClientOnly>
+  );
+}
+
+function SavingsDashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'savings'>('overview');
@@ -50,7 +59,6 @@ export default function SavingsDashboard() {
   useEffect(() => {
     const initializePage = async () => {
       try {
-        setMounted(true);
         // Any additional initialization can go here
       } catch (err) {
         console.error("Error initializing savings dashboard:", err);
@@ -62,19 +70,6 @@ export default function SavingsDashboard() {
 
     initializePage();
   }, []);
-
-  if (!mounted) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-full">
-          <div className="bg-gray-900/60 backdrop-blur-md border border-gray-800 rounded-xl p-6 flex items-center space-x-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-            <p className="text-white">Loading dashboard...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   if (error) {
     return (

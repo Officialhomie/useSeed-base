@@ -5,6 +5,8 @@ import DashboardLayout from '@/components/core/DashboardLayout';
 import { motion } from 'framer-motion';
 import { FiTrendingUp, FiDollarSign, FiPieChart, FiActivity, FiArrowRight, FiArrowUp, FiMinus, FiPlus, FiRefreshCw, FiInfo } from 'react-icons/fi';
 import Image from 'next/image';
+import ClientOnly from '@/components/utils/ClientOnly';
+
 
 // Define types
 interface TokenInfo {
@@ -60,13 +62,6 @@ export default function YieldDashboard() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [selectedPool, setSelectedPool] = useState<YieldPosition | null>(null);
-
-  // Handle hydration
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return <div className="loading-container">Loading...</div>;
 
   // Mock data for user's yield positions
   const userPositions: YieldPosition[] = [

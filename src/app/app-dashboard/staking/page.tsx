@@ -5,17 +5,19 @@ import DashboardLayout from '@/components/core/DashboardLayout';
 import { motion } from 'framer-motion';
 import { FiArrowUpRight, FiClock, FiLock, FiUnlock, FiCodesandbox, FiAward, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import Image from 'next/image';
+import ClientOnly from '@/components/utils/ClientOnly';
 
 export default function StakingDashboard() {
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <StakingDashboardContent />
+    </ClientOnly>
+  );
+}
+
+function StakingDashboardContent() {
   const [activeTab, setActiveTab] = useState('myStakes');
   const [filterStatus, setFilterStatus] = useState('all');
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return <div className="loading-container">Loading...</div>;
 
   // Mock data for staking positions
   const stakingPositions = [

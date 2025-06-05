@@ -5,21 +5,17 @@ import DashboardLayout from '@/components/core/DashboardLayout';
 import { useAccount, useDisconnect } from 'wagmi';
 import { motion } from 'framer-motion';
 import { FiUser, FiEye, FiGlobe, FiBell, FiShield, FiToggleRight, FiMoon, FiSun, FiInfo, FiCheck } from 'react-icons/fi';
-
-function useClientWagmi() {
-  const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const account = mounted ? useAccount() : { address: undefined, isConnected: false };
-  const disconnect = mounted ? useDisconnect() : { disconnect: () => {} };
-  
-  return { ...account, disconnect: disconnect.disconnect, mounted };
-}
+import ClientOnly from '@/components/utils/ClientOnly';
 
 export default function SettingsDashboard() {
+  return (
+    <ClientOnly>
+      <SettingsDashboardContent />
+    </ClientOnly>
+  );
+}
+
+function SettingsDashboardContent() {
   const [localMounted, setLocalMounted] = useState(false);
   const [activeTab, setActiveTab] = useState('account');
   const [darkMode, setDarkMode] = useState(true);
@@ -34,13 +30,8 @@ export default function SettingsDashboard() {
   const [language, setLanguage] = useState('english');
   const [slippageTolerance, setSlippageTolerance] = useState(0.5);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const { address, isConnected, disconnect, mounted: wagmiMounted } = useClientWagmi();
-
-  useEffect(() => {
-    setLocalMounted(true);
-  }, []);
-
-  if (!localMounted || !wagmiMounted) return <div className="loading-container">Loading...</div>;
+  const { address, isConnected } = useAccount(); // Direct wagmi hook usage
+  const { disconnect } = useDisconnect(); 
   
   const handleSave = () => {
     setSaveSuccess(true);

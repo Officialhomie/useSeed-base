@@ -4,16 +4,19 @@ import NavigationBar from '@/components/core/NavigationBar';
 import Subscribe from '@/components/ui/Subscribe';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import ClientOnly from '@/components/utils/ClientOnly';
 import '../page-styles.css';
 import '../smart-wallet.css';
 
 export default function SmartWalletPage() {
-  const [_mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <SmartWalletPageContent />
+    </ClientOnly>
+  );
+}
 
-  // Handle hydration
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+function SmartWalletPageContent() {
 
   return (
     <>

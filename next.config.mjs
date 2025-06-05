@@ -8,9 +8,6 @@ const nextConfig = {
   experimental: {
     esmExternals: 'loose',
   },
-  async generateStaticParams() {
-    return [];
-  },
   
   // Configure headers for CORS and security
   async headers() {

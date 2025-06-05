@@ -5,15 +5,18 @@ import OnboardingHero from '@/components/onboarding/OnboardingHero';
 import NavigationBar from '@/components/core/NavigationBar';
 import { ConnectAndSIWE } from '@/components/wallet/ConnectAndSIWE';
 import { motion } from 'framer-motion';
+import ClientOnly from '@/components/utils/ClientOnly';
 
 export default function OnboardingPage() {
-  const [mounted, setMounted] = useState(false);
+  return (
+    <ClientOnly>
+      <OnboardingPageContent />
+    </ClientOnly>
+  );
+}
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+function OnboardingPageContent() {
 
-  if (!mounted) return null;
 
   return (
     <>
